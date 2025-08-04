@@ -94,6 +94,9 @@ class PostgreSQLConnection:
         # Set up the connection
         self._setup_connection()
         
+        # Configure JSONB handling for Gramps compatibility
+        self._setup_jsonb_handling()
+        
         # Track prepared statements
         self._prepared_statements = {}
         
@@ -226,6 +229,12 @@ class PostgreSQLConnection:
                 )
             
             self._commit()
+    
+    def _setup_jsonb_handling(self):
+        """Configure JSONB to return as JSON strings for Gramps compatibility."""
+        # No-op for now - let psycopg3 handle JSONB normally
+        # The issue might be elsewhere
+        pass
     
     @contextmanager
     def _get_cursor(self, row_factory=None):
@@ -374,6 +383,16 @@ class PostgreSQLConnection:
         # Convert ? placeholders to %s
         if '?' in query:
             query = query.replace('?', '%s')
+        
+        # CRITICAL: Convert json_data selection to return as text for JSONSerializer
+        # This ensures psycopg3 doesn't parse JSONB to Python objects
+        if 'json_data FROM' in query:
+            query = re.sub(
+                r'(SELECT\s+(?:\w+\.)?)(json_data)(\s+FROM)',
+                r'\1\2::text\3',
+                query,
+                flags=re.IGNORECASE
+            )
         
         # Handle REGEXP operator
         query = re.sub(r'\bREGEXP\b', '~', query, flags=re.IGNORECASE)

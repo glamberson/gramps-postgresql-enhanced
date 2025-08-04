@@ -202,14 +202,13 @@ class PostgreSQLSchema:
         self.log.info("PostgreSQL Enhanced schema created successfully")
     
     def _create_object_table(self, obj_type):
-        """Create a table for a specific object type."""
+        """Create a table for a specific object type with GENERATED columns."""
         if self.use_jsonb:
-            # Build column definitions for secondary columns
-            # These are needed for Gramps queries but we won't update them
-            extra_columns = []
+            # Build GENERATED STORED column definitions
+            generated_columns = []
             if obj_type in REQUIRED_COLUMNS:
                 for col_name, json_path in REQUIRED_COLUMNS[obj_type].items():
-                    # Determine column type based on the field
+                    # Determine column type
                     col_type = "VARCHAR(255)"
                     if "INTEGER" in json_path:
                         col_type = "INTEGER"
@@ -221,33 +220,31 @@ class PostgreSQLSchema:
                     elif col_name in ['father_handle', 'mother_handle', 'source_handle', 
                                       'place', 'enclosed_by']:
                         col_type = "VARCHAR(50)"
-                        
-                    extra_columns.append(f"{col_name} {col_type}")
+                    
+                    # PostgreSQL 12+ GENERATED ALWAYS AS ... STORED
+                    generated_columns.append(
+                        f"{col_name} {col_type} GENERATED ALWAYS AS ({json_path}) STORED"
+                    )
             
             # Join column definitions
-            extra_cols_sql = ""
-            if extra_columns:
-                extra_cols_sql = ",\n                    " + ",\n                    ".join(extra_columns)
+            generated_cols_sql = ""
+            if generated_columns:
+                generated_cols_sql = ",\n                    " + ",\n                    ".join(generated_columns)
             
-            # Enhanced table with JSONB and secondary columns for compatibility
-            # JSONSerializer uses json_data, not blob_data
             self.conn.execute(f"""
                 CREATE TABLE IF NOT EXISTS {obj_type} (
                     handle VARCHAR(50) PRIMARY KEY,
-                    json_data JSONB,  -- JSONSerializer stores here
-                    blob_data BYTEA,  -- Keep for potential compatibility
-                    change_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP{extra_cols_sql}
+                    json_data JSONB NOT NULL,  -- JSONSerializer stores here
+                    change_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP{generated_cols_sql}
                 )
             """)
             
-            # Create JSONB expression indexes for fields DBAPI expects
-            if obj_type in REQUIRED_COLUMNS:
-                for col_name, json_path in REQUIRED_COLUMNS[obj_type].items():
-                    # Create expression index on the JSONB path
-                    idx_name = f"idx_{obj_type}_{col_name}"
+            # Create indexes on GENERATED columns (not expression indexes)
+            if obj_type in REQUIRED_INDEXES:
+                for column in REQUIRED_INDEXES[obj_type]:
                     self.conn.execute(f"""
-                        CREATE INDEX IF NOT EXISTS {idx_name}
-                        ON {obj_type} (({json_path}))
+                        CREATE INDEX IF NOT EXISTS idx_{obj_type}_{column} 
+                        ON {obj_type} ({column})
                     """)
             
             # Create GIN index for general JSONB queries
@@ -258,9 +255,6 @@ class PostgreSQLSchema:
             
             # Create object-specific indexes
             self._create_object_specific_indexes(obj_type)
-            
-            # Create trigger to sync secondary columns from JSONB
-            self._create_sync_trigger(obj_type)
             
         else:
             # Basic table (blob only)
@@ -273,15 +267,7 @@ class PostgreSQLSchema:
     
     def _create_object_specific_indexes(self, obj_type):
         """Create indexes specific to each object type."""
-        
-        # First, create all required indexes from DBAPI
-        if obj_type in REQUIRED_INDEXES:
-            for column in REQUIRED_INDEXES[obj_type]:
-                if column != 'gramps_id':  # gramps_id index already created
-                    self.conn.execute(f"""
-                        CREATE INDEX IF NOT EXISTS idx_{obj_type}_{column} 
-                        ON {obj_type} ({column})
-                    """)
+        # Indexes on GENERATED columns are already created above
         
         # Then add our enhanced indexes for better performance
         if obj_type == 'person':
@@ -341,41 +327,6 @@ class PostgreSQLSchema:
                     """)
             except Exception as e:
                 self.log.debug(f"Could not create trigram index on notes: {e}")
-    
-    def _create_sync_trigger(self, obj_type):
-        """Create trigger to sync secondary columns from JSONB data."""
-        if obj_type not in REQUIRED_COLUMNS:
-            return
-            
-        # Build the SET clause for the trigger
-        set_clauses = []
-        for col_name, json_path in REQUIRED_COLUMNS[obj_type].items():
-            # Replace json_data with NEW.json_data in the path
-            trigger_path = json_path.replace('json_data', 'NEW.json_data')
-            set_clauses.append(f"NEW.{col_name} = {trigger_path}")
-        
-        set_sql = ";\n        ".join(set_clauses)
-        
-        # Create the trigger function
-        self.conn.execute(f"""
-            CREATE OR REPLACE FUNCTION sync_{obj_type}_columns()
-            RETURNS TRIGGER AS $$
-            BEGIN
-                {set_sql};
-                RETURN NEW;
-            END;
-            $$ LANGUAGE plpgsql;
-        """)
-        
-        # Create the trigger
-        self.conn.execute(f"""
-            DROP TRIGGER IF EXISTS {obj_type}_sync_trigger ON {obj_type};
-            
-            CREATE TRIGGER {obj_type}_sync_trigger
-            BEFORE INSERT OR UPDATE OF json_data ON {obj_type}
-            FOR EACH ROW
-            EXECUTE FUNCTION sync_{obj_type}_columns();
-        """)
     
     def _create_enhanced_features(self):
         """Create PostgreSQL-specific enhanced features."""
