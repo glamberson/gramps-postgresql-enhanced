@@ -204,28 +204,37 @@ class PostgreSQLSchema:
         """Create a table for a specific object type."""
         if self.use_jsonb:
             # Build column definitions for required columns
-            generated_columns = []
+            # These are REAL columns that Gramps will update directly
+            regular_columns = []
             if obj_type in REQUIRED_COLUMNS:
                 for col_name, json_path in REQUIRED_COLUMNS[obj_type].items():
-                    if col_name != 'gramps_id':  # gramps_id is already included
-                        generated_columns.append(
-                            f"{col_name} VARCHAR(255) GENERATED ALWAYS AS ({json_path}) STORED"
-                        )
+                    # Determine column type based on the field
+                    col_type = "VARCHAR(255)"
+                    if "CAST" in json_path and "AS INTEGER" in json_path:
+                        col_type = "INTEGER"
+                    elif "CAST" in json_path and "AS BOOLEAN" in json_path:
+                        col_type = "BOOLEAN"
+                    elif col_name in ['title', 'desc', 'description', 'author', 'pubinfo', 
+                                      'abbrev', 'page', 'name', 'path', 'given_name', 'surname']:
+                        col_type = "TEXT"
+                    elif col_name in ['father_handle', 'mother_handle', 'source_handle', 
+                                      'place', 'enclosed_by']:
+                        col_type = "VARCHAR(50)"
+                        
+                    regular_columns.append(f"{col_name} {col_type}")
             
             # Join all column definitions
-            extra_columns = ',\n                    '.join(generated_columns)
-            if extra_columns:
-                extra_columns = ',\n                    ' + extra_columns
+            extra_columns = ''
+            if regular_columns:
+                extra_columns = ',\n                    ' + ',\n                    '.join(regular_columns)
             
             # Enhanced table with JSONB
+            # Note: NO GENERATED columns - Gramps will update these directly
             self.conn.execute(f"""
                 CREATE TABLE IF NOT EXISTS {obj_type} (
                     handle VARCHAR(50) PRIMARY KEY,
                     blob_data BYTEA,
                     json_data JSONB,
-                    -- Generated columns for common queries
-                    gramps_id VARCHAR(50) GENERATED ALWAYS AS 
-                        (json_data->>'gramps_id') STORED,
                     change_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP{extra_columns}
                 )
             """)

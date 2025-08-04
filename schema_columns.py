@@ -17,6 +17,7 @@ for each table type, with their JSONB extraction paths.
 """
 
 # Required columns for each table type based on DBAPI expectations
+# Note: These are REAL columns, not GENERATED, because Gramps updates them directly
 REQUIRED_COLUMNS = {
     'person': {
         'given_name': "json_data->'names'->0->'first_name'",
