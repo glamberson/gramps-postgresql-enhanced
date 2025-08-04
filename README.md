@@ -2,7 +2,7 @@
 
 This addon provides an enhanced PostgreSQL database backend for Gramps genealogy software, offering advanced features while maintaining full compatibility with the Gramps data model.
 
-**Project Status:** Active development | [GitHub Repository](https://github.com/gregglind/gramps-postgresql-enhanced) | [Submit Issues](https://github.com/gregglind/gramps-postgresql-enhanced/issues)
+**Project Status:** Active development | [GitHub Repository](https://github.com/glamberson/gramps-postgresql-enhanced) | [Submit Issues](https://github.com/glamberson/gramps-postgresql-enhanced/issues)
 
 ## Key Features
 
@@ -53,7 +53,7 @@ pip install 'psycopg[binary]>=3.1'
 #### Option A: From GitHub Release
 ```bash
 # Download the latest release
-wget https://github.com/gregglind/gramps-postgresql-enhanced/releases/latest/download/PostgreSQLEnhanced.addon.tgz
+wget https://github.com/glamberson/gramps-postgresql-enhanced/releases/latest/download/PostgreSQLEnhanced.addon.tgz
 
 # Install via Gramps
 # 1. Open Gramps
@@ -66,17 +66,17 @@ wget https://github.com/gregglind/gramps-postgresql-enhanced/releases/latest/dow
 ```bash
 # Clone to Gramps addon directory
 cd ~/.local/share/gramps/gramps60/plugins/
-git clone https://github.com/gregglind/gramps-postgresql-enhanced.git PostgreSQLEnhanced
+git clone https://github.com/glamberson/gramps-postgresql-enhanced.git PostgreSQLEnhanced
 
 # Or for system-wide installation:
 cd /usr/share/gramps/plugins/
-sudo git clone https://github.com/gregglind/gramps-postgresql-enhanced.git PostgreSQLEnhanced
+sudo git clone https://github.com/glamberson/gramps-postgresql-enhanced.git PostgreSQLEnhanced
 ```
 
 #### Option C: Development Installation (for testing)
 ```bash
 # Clone anywhere
-git clone https://github.com/gregglind/gramps-postgresql-enhanced.git
+git clone https://github.com/glamberson/gramps-postgresql-enhanced.git
 cd gramps-postgresql-enhanced
 
 # Create symlink to Gramps plugins directory
