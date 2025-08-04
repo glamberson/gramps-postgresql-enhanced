@@ -56,7 +56,7 @@ _ = _trans.gettext
 # Constants
 #
 # -------------------------------------------------------------------------
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 21  # Must match Gramps DBAPI version
 
 # Gramps object types
 OBJECT_TYPES = [
