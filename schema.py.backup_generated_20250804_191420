@@ -209,10 +209,10 @@ class PostgreSQLSchema:
         self.log.info("PostgreSQL Enhanced schema created successfully")
     
     def _create_object_table(self, obj_type):
-        """Create a table for a specific object type with regular secondary columns."""
+        """Create a table for a specific object type with GENERATED columns."""
         if self.use_jsonb:
-            # Build regular column definitions (not GENERATED)
-            regular_columns = []
+            # Build GENERATED STORED column definitions
+            generated_columns = []
             if obj_type in REQUIRED_COLUMNS:
                 for col_name, json_path in REQUIRED_COLUMNS[obj_type].items():
                     # Determine column type
@@ -228,23 +228,25 @@ class PostgreSQLSchema:
                                       'place', 'enclosed_by']:
                         col_type = "VARCHAR(50)"
                     
-                    # Regular columns that will be updated by _update_secondary_values
-                    regular_columns.append(f"{col_name} {col_type}")
+                    # PostgreSQL 12+ GENERATED ALWAYS AS ... STORED
+                    generated_columns.append(
+                        f"{col_name} {col_type} GENERATED ALWAYS AS ({json_path}) STORED"
+                    )
             
             # Join column definitions
-            regular_cols_sql = ""
-            if regular_columns:
-                regular_cols_sql = ",\n                    ".join(regular_columns) + ",\n                    "
+            generated_cols_sql = ""
+            if generated_columns:
+                generated_cols_sql = ",\n                    " + ",\n                    ".join(generated_columns)
             
             self.conn.execute(f"""
                 CREATE TABLE IF NOT EXISTS {obj_type} (
                     handle VARCHAR(50) PRIMARY KEY,
                     json_data JSONB NOT NULL,  -- JSONSerializer stores here
-                    {regular_cols_sql}change_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                    change_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP{generated_cols_sql}
                 )
             """)
             
-            # Create indexes on secondary columns
+            # Create indexes on GENERATED columns (not expression indexes)
             if obj_type in REQUIRED_INDEXES:
                 for column in REQUIRED_INDEXES[obj_type]:
                     self.conn.execute(f"""
@@ -272,7 +274,7 @@ class PostgreSQLSchema:
     
     def _create_object_specific_indexes(self, obj_type):
         """Create indexes specific to each object type."""
-        # Indexes on secondary columns are already created above
+        # Indexes on GENERATED columns are already created above
         
         # Then add our enhanced indexes for better performance
         if obj_type == 'person':

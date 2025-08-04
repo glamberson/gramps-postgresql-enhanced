@@ -49,6 +49,7 @@ from urllib.parse import urlparse, parse_qs
 # -------------------------------------------------------------------------
 try:
     import psycopg
+    from psycopg import sql
     from psycopg.types.json import Jsonb
     from psycopg.rows import dict_row
     PSYCOPG_AVAILABLE = True
@@ -86,6 +87,7 @@ from connection import PostgreSQLConnection
 from schema import PostgreSQLSchema
 from migration import MigrationManager
 from queries import EnhancedQueries
+from schema_columns import REQUIRED_COLUMNS
 
 # -------------------------------------------------------------------------
 #
@@ -365,6 +367,14 @@ class PostgreSQLEnhanced(DBAPI):
                     import shutil
                     shutil.copy(template_path, config_path)
                     LOG.info(f"Created connection_info.txt template at {config_path}")
+                    # Now read the template we just created
+                    with open(config_path, 'r') as f:
+                        for line in f:
+                            line = line.strip()
+                            if line and not line.startswith('#') and '=' in line:
+                                key, value = line.split('=', 1)
+                                config[key.strip()] = value.strip()
+                    LOG.info(f"Loaded configuration from template")
                 except Exception as e:
                     LOG.debug(f"Could not create config template: {e}")
         
@@ -418,15 +428,53 @@ class PostgreSQLEnhanced(DBAPI):
     
     def _update_secondary_values(self, obj):
         """
-        Override DBAPI's _update_secondary_values.
+        Update secondary columns from JSONB data.
         
-        We don't need to update secondary columns because:
-        1. All data is already in json_data
-        2. We use JSONB indexes for queries
-        3. Storing in two places violates DRY and risks inconsistency
+        This extracts values from the JSONB column and updates the 
+        secondary columns that DBAPI expects for queries.
         """
-        # Do nothing - data is already in JSONB
-        pass
+        table = obj.__class__.__name__.lower()
+        # Use table prefix if in shared mode
+        table_name = f"{self.table_prefix}{table}" if hasattr(self, 'table_prefix') else table
+        
+        # Get the JSON data
+        json_obj = self.serializer.object_to_data(obj)
+        
+        # Build UPDATE statement based on object type
+        if table in REQUIRED_COLUMNS:
+            sets = []
+            values = []
+            
+            for col_name, json_path in REQUIRED_COLUMNS[table].items():
+                sets.append(f"{col_name} = ({json_path})")
+            
+            if sets:
+                # Execute UPDATE using JSONB extraction
+                query = f"""
+                    UPDATE {table_name} 
+                    SET {', '.join(sets)}
+                    WHERE handle = %s
+                """
+                self.dbapi.execute(query, [obj.handle])
+                
+        # Also handle derived fields that DBAPI adds
+        if table == 'person':
+            # Extract given_name and surname if not already in REQUIRED_COLUMNS
+            if 'given_name' not in REQUIRED_COLUMNS.get('person', {}):
+                self.dbapi.execute(f"""
+                    UPDATE {table_name}
+                    SET given_name = COALESCE(json_data->'primary_name'->>'first_name', ''),
+                        surname = COALESCE(json_data->'primary_name'->'surname_list'->0->>'surname', '')
+                    WHERE handle = %s
+                """, [obj.handle])
+        elif table == 'place':
+            # Handle enclosed_by if not in REQUIRED_COLUMNS
+            if 'enclosed_by' not in REQUIRED_COLUMNS.get('place', {}):
+                self.dbapi.execute(f"""
+                    UPDATE {table_name}
+                    SET enclosed_by = json_data->>'enclosed_by'
+                    WHERE handle = %s
+                """, [obj.handle])
     
     def close(self, *args, **kwargs):
         """Close the database connection."""

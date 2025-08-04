@@ -3,10 +3,10 @@
 # Edit the values below to match your PostgreSQL setup.
 
 # Connection details
-host = localhost
+host = 192.168.10.90
 port = 5432
-user = gramps_user
-password = CHANGE_ME
+user = genealogy_user
+password = GenealogyData2025
 
 # Database mode: 'separate' or 'shared'
 # separate = Each family tree gets its own PostgreSQL database (recommended)

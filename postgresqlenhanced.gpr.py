@@ -35,7 +35,7 @@ register(DATABASE,
                   "graph database support (Apache AGE), vector similarity (pgvector), "
                   "and AI/ML capabilities. For developers and advanced users only. "
                   "Requires PostgreSQL 15+ with extensions."),
-    version = '1.0.1',
+    version = '1.0.2',
     gramps_target_version="6.0",
     status=STABLE,
     audience=DEVELOPER,  # Developer-level experimental features

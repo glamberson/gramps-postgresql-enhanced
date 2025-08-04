@@ -20,8 +20,8 @@ for each table type, with their JSONB extraction paths.
 # Note: These are REAL columns, not GENERATED, because Gramps updates them directly
 REQUIRED_COLUMNS = {
     'person': {
-        'given_name': "json_data->'names'->0->'first_name'",
-        'surname': "json_data->'names'->0->'surname'->>'surname'",
+        'given_name': "json_data->'primary_name'->>'first_name'",
+        'surname': "json_data->'primary_name'->'surname_list'->0->>'surname'",
         'gramps_id': "json_data->>'gramps_id'",
         'gender': "CAST(json_data->>'gender' AS INTEGER)",
         'death_ref_index': "CAST(json_data->>'death_ref_index' AS INTEGER)",
