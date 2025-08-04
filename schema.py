@@ -460,11 +460,11 @@ class PostgreSQLSchema:
         """Set schema version in metadata."""
         if self.use_jsonb:
             self.conn.execute("""
-                INSERT INTO metadata (setting, value, json_value)
+                INSERT INTO metadata (setting, value, json_data)
                 VALUES ('schema_version', %s, %s)
                 ON CONFLICT (setting) DO UPDATE
                 SET value = EXCLUDED.value,
-                    json_value = EXCLUDED.json_value,
+                    json_data = EXCLUDED.json_data,
                     updated_at = CURRENT_TIMESTAMP
             """, [pickle.dumps(version), Jsonb(version)])
         else:
