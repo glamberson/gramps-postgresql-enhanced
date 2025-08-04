@@ -249,12 +249,9 @@ class PostgreSQLEnhanced(DBAPI):
         except Exception as e:
             raise DbConnectionError(str(e), connection_string)
         
-        # Set serializer based on configuration
-        if self._use_jsonb:
-            # For now use blob serializer, but prepare for JSON
-            self.serializer = BlobSerializer()
-        else:
-            self.serializer = BlobSerializer()
+        # Set serializer - DBAPI expects JSONSerializer
+        # JSONSerializer has object_to_data method that DBAPI needs
+        self.serializer = JSONSerializer()
         
         # Initialize schema
         schema = PostgreSQLSchema(self.dbapi, use_jsonb=self._use_jsonb)
