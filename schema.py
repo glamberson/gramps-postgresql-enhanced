@@ -121,11 +121,12 @@ class PostgreSQLSchema:
         # Create metadata table
         if self.use_jsonb:
             # Enhanced metadata with JSON support
+            # JSONSerializer expects json_data column for metadata
             self.conn.execute("""
                 CREATE TABLE IF NOT EXISTS metadata (
                     setting VARCHAR(255) PRIMARY KEY,
-                    value BYTEA,
-                    json_value JSONB,
+                    value BYTEA,  -- Keep for compatibility
+                    json_data JSONB,  -- JSONSerializer uses this
                     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 )
             """)
@@ -229,11 +230,12 @@ class PostgreSQLSchema:
                 extra_cols_sql = ",\n                    " + ",\n                    ".join(extra_columns)
             
             # Enhanced table with JSONB and secondary columns for compatibility
+            # JSONSerializer uses json_data, not blob_data
             self.conn.execute(f"""
                 CREATE TABLE IF NOT EXISTS {obj_type} (
                     handle VARCHAR(50) PRIMARY KEY,
-                    blob_data BYTEA,
-                    json_data JSONB,
+                    json_data JSONB,  -- JSONSerializer stores here
+                    blob_data BYTEA,  -- Keep for potential compatibility
                     change_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP{extra_cols_sql}
                 )
             """)
