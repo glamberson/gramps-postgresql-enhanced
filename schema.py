@@ -203,48 +203,27 @@ class PostgreSQLSchema:
     def _create_object_table(self, obj_type):
         """Create a table for a specific object type."""
         if self.use_jsonb:
-            # Build column definitions for required columns
-            # These are REAL columns that Gramps will update directly
-            regular_columns = []
-            if obj_type in REQUIRED_COLUMNS:
-                for col_name, json_path in REQUIRED_COLUMNS[obj_type].items():
-                    # Determine column type based on the field
-                    col_type = "VARCHAR(255)"
-                    if "CAST" in json_path and "AS INTEGER" in json_path:
-                        col_type = "INTEGER"
-                    elif "CAST" in json_path and "AS BOOLEAN" in json_path:
-                        col_type = "BOOLEAN"
-                    elif col_name in ['title', 'desc', 'description', 'author', 'pubinfo', 
-                                      'abbrev', 'page', 'name', 'path', 'given_name', 'surname']:
-                        col_type = "TEXT"
-                    elif col_name in ['father_handle', 'mother_handle', 'source_handle', 
-                                      'place', 'enclosed_by']:
-                        col_type = "VARCHAR(50)"
-                        
-                    regular_columns.append(f"{col_name} {col_type}")
-            
-            # Join all column definitions
-            extra_columns = ''
-            if regular_columns:
-                extra_columns = ',\n                    ' + ',\n                    '.join(regular_columns)
-            
-            # Enhanced table with JSONB
-            # Note: NO GENERATED columns - Gramps will update these directly
+            # Enhanced table with JSONB only - no duplicate columns
             self.conn.execute(f"""
                 CREATE TABLE IF NOT EXISTS {obj_type} (
                     handle VARCHAR(50) PRIMARY KEY,
                     blob_data BYTEA,
                     json_data JSONB,
-                    change_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP{extra_columns}
+                    change_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 )
             """)
             
-            # Create standard indexes
-            self.conn.execute(f"""
-                CREATE INDEX IF NOT EXISTS idx_{obj_type}_gramps_id 
-                    ON {obj_type} (gramps_id)
-            """)
+            # Create JSONB expression indexes for fields DBAPI expects
+            if obj_type in REQUIRED_COLUMNS:
+                for col_name, json_path in REQUIRED_COLUMNS[obj_type].items():
+                    # Create expression index on the JSONB path
+                    idx_name = f"idx_{obj_type}_{col_name}"
+                    self.conn.execute(f"""
+                        CREATE INDEX IF NOT EXISTS {idx_name}
+                        ON {obj_type} (({json_path}))
+                    """)
             
+            # Create GIN index for general JSONB queries
             self.conn.execute(f"""
                 CREATE INDEX IF NOT EXISTS idx_{obj_type}_json 
                     ON {obj_type} USING GIN (json_data)

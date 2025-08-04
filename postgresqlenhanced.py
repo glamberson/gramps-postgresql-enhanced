@@ -309,6 +309,18 @@ class PostgreSQLEnhanced(DBAPI):
                 if 'use_jsonb' in params:
                     self._use_jsonb = params['use_jsonb'][0].lower() != 'false'
     
+    def _update_secondary_values(self, obj):
+        """
+        Override DBAPI's _update_secondary_values.
+        
+        We don't need to update secondary columns because:
+        1. All data is already in json_data
+        2. We use JSONB indexes for queries
+        3. Storing in two places violates DRY and risks inconsistency
+        """
+        # Do nothing - data is already in JSONB
+        pass
+    
     def close(self, *args, **kwargs):
         """Close the database connection."""
         if hasattr(self, 'dbapi') and self.dbapi:
