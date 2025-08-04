@@ -274,6 +274,37 @@ class PostgreSQLConnection:
             
         return pg_collation
     
+    def _convert_args_for_postgres(self, query, args):
+        """
+        Convert SQLite-style arguments to PostgreSQL-compatible types.
+        
+        Specifically handles:
+        - Integer to boolean conversion for 'private' column
+        - Other type conversions as needed
+        """
+        if not args:
+            return args
+            
+        # Check if this is an UPDATE statement with 'private' column
+        if 'private = ' in query.lower():
+            # Convert args to list for modification
+            converted_args = list(args)
+            
+            # Find position of 'private' in the SET clause
+            sets_part = query.lower().split('set')[1].split('where')[0]
+            columns = [col.strip().split('=')[0].strip() for col in sets_part.split(',')]
+            
+            # Convert integer to boolean for 'private' column
+            for i, col in enumerate(columns):
+                if col == 'private' and i < len(converted_args):
+                    val = converted_args[i]
+                    if isinstance(val, int):
+                        converted_args[i] = bool(val)
+                        
+            return converted_args
+        
+        return args
+
     def execute(self, query, args=None):
         """
         Execute an SQL statement.
@@ -282,13 +313,17 @@ class PostgreSQLConnection:
         - Converting ? placeholders to %s
         - Translating SQLite-specific syntax
         - Optimizing common queries
+        - Converting data types for PostgreSQL
         """
         # Translate query for PostgreSQL
         pg_query = self._translate_query(query)
         
+        # Convert arguments for PostgreSQL compatibility
+        pg_args = self._convert_args_for_postgres(pg_query, args)
+        
         self.log.debug(f"SQL: {pg_query}")
-        if args:
-            self.log.debug(f"Args: {args}")
+        if pg_args:
+            self.log.debug(f"Args: {pg_args}")
         
         # Get a persistent cursor for DBAPI compatibility
         if not hasattr(self, '_persistent_cursor') or self._persistent_cursor.closed:
@@ -302,8 +337,8 @@ class PostgreSQLConnection:
         # Execute query
         cur = self._persistent_cursor
         try:
-            if args:
-                cur.execute(pg_query, args)
+            if pg_args:
+                cur.execute(pg_query, pg_args)
             else:
                 cur.execute(pg_query)
         except Exception as e:
