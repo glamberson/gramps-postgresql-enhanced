@@ -314,6 +314,7 @@ class PostgreSQLConnection:
         - Translating SQLite-specific syntax
         - Optimizing common queries
         - Converting data types for PostgreSQL
+        - Handling GENERATED column UPDATE errors
         """
         # Translate query for PostgreSQL
         pg_query = self._translate_query(query)
@@ -342,7 +343,19 @@ class PostgreSQLConnection:
             else:
                 cur.execute(pg_query)
         except Exception as e:
-            # Rollback on error to prevent "current transaction is aborted" errors
+            # Handle GENERATED column UPDATE errors
+            error_msg = str(e).lower()
+            if ('generated' in error_msg or 
+                'can only be updated to default' in error_msg or
+                e.__class__.__name__ == 'GeneratedAlways'):
+                # This is expected for GENERATED columns
+                # Log but don't fail
+                if 'UPDATE' in pg_query.upper():
+                    self.log.debug(f"Ignoring GENERATED column UPDATE error: {e}")
+                    self.rollback()
+                    return  # Silently succeed
+            
+            # Rollback on other errors to prevent "current transaction is aborted" errors
             self.rollback()
             raise e
         

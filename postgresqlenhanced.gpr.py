@@ -22,17 +22,23 @@
 PostgreSQL Enhanced Database Backend Registration
 """
 
+from gramps.gen.plug._pluginreg import register, STABLE, DATABASE, DEVELOPER
+from gramps.gen.const import GRAMPS_LOCALE as glocale
+
+_ = glocale.translation.gettext
+
 register(DATABASE,
     id='postgresqlenhanced',
     name=_("PostgreSQL Enhanced"),
     name_accell=_("PostgreSQL _Enhanced Database"), 
-    description=_("PostgreSQL Enhanced Database Backend with JSONB storage, "
-                  "advanced queries, and migration support. Uses psycopg3 for "
-                  "modern PostgreSQL features while maintaining full compatibility."),
+    description=_("EXPERIMENTAL: Advanced PostgreSQL backend with JSONB storage, "
+                  "graph database support (Apache AGE), vector similarity (pgvector), "
+                  "and AI/ML capabilities. For developers and advanced users only. "
+                  "Requires PostgreSQL 15+ with extensions."),
     version = '1.0.1',
     gramps_target_version="6.0",
     status=STABLE,
-    audience=EVERYONE,  # Available to all users
+    audience=DEVELOPER,  # Developer-level experimental features
     fname="postgresqlenhanced.py",
     databaseclass="PostgreSQLEnhanced",
     authors=["Greg Lamberson"],
