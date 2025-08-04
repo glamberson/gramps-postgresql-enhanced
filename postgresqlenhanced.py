@@ -295,6 +295,10 @@ class PostgreSQLEnhanced(DBAPI):
         
         # Call our initialize method
         self._initialize(directory, actual_username, actual_password)
+        
+        # Call parent's load to set up undo manager and other base functionality
+        # Pass the directory and callback to satisfy the parent's requirements
+        super().load(directory, callback, mode or "w")
     
     def _parse_connection_options(self, connection_string):
         """Parse connection options from the connection string."""
