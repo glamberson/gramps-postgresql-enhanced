@@ -203,13 +203,38 @@ class PostgreSQLSchema:
     def _create_object_table(self, obj_type):
         """Create a table for a specific object type."""
         if self.use_jsonb:
-            # Enhanced table with JSONB only - no duplicate columns
+            # Build column definitions for secondary columns
+            # These are needed for Gramps queries but we won't update them
+            extra_columns = []
+            if obj_type in REQUIRED_COLUMNS:
+                for col_name, json_path in REQUIRED_COLUMNS[obj_type].items():
+                    # Determine column type based on the field
+                    col_type = "VARCHAR(255)"
+                    if "INTEGER" in json_path:
+                        col_type = "INTEGER"
+                    elif "BOOLEAN" in json_path:
+                        col_type = "BOOLEAN"
+                    elif col_name in ['title', 'desc', 'description', 'author', 'pubinfo', 
+                                      'abbrev', 'page', 'name', 'path', 'given_name', 'surname']:
+                        col_type = "TEXT"
+                    elif col_name in ['father_handle', 'mother_handle', 'source_handle', 
+                                      'place', 'enclosed_by']:
+                        col_type = "VARCHAR(50)"
+                        
+                    extra_columns.append(f"{col_name} {col_type}")
+            
+            # Join column definitions
+            extra_cols_sql = ""
+            if extra_columns:
+                extra_cols_sql = ",\n                    " + ",\n                    ".join(extra_columns)
+            
+            # Enhanced table with JSONB and secondary columns for compatibility
             self.conn.execute(f"""
                 CREATE TABLE IF NOT EXISTS {obj_type} (
                     handle VARCHAR(50) PRIMARY KEY,
                     blob_data BYTEA,
                     json_data JSONB,
-                    change_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                    change_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP{extra_cols_sql}
                 )
             """)
             
@@ -231,6 +256,9 @@ class PostgreSQLSchema:
             
             # Create object-specific indexes
             self._create_object_specific_indexes(obj_type)
+            
+            # Create trigger to sync secondary columns from JSONB
+            self._create_sync_trigger(obj_type)
             
         else:
             # Basic table (blob only)
@@ -302,6 +330,39 @@ class PostgreSQLSchema:
                     CREATE INDEX IF NOT EXISTS idx_note_text_trgm
                         ON note USING GIN ((json_data->>'text') gin_trgm_ops)
                 """)
+    
+    def _create_sync_trigger(self, obj_type):
+        """Create trigger to sync secondary columns from JSONB data."""
+        if obj_type not in REQUIRED_COLUMNS:
+            return
+            
+        # Build the SET clause for the trigger
+        set_clauses = []
+        for col_name, json_path in REQUIRED_COLUMNS[obj_type].items():
+            set_clauses.append(f"NEW.{col_name} = {json_path}")
+        
+        set_sql = ";\n        ".join(set_clauses)
+        
+        # Create the trigger function
+        self.conn.execute(f"""
+            CREATE OR REPLACE FUNCTION sync_{obj_type}_columns()
+            RETURNS TRIGGER AS $$
+            BEGIN
+                {set_sql};
+                RETURN NEW;
+            END;
+            $$ LANGUAGE plpgsql;
+        """)
+        
+        # Create the trigger
+        self.conn.execute(f"""
+            DROP TRIGGER IF EXISTS {obj_type}_sync_trigger ON {obj_type};
+            
+            CREATE TRIGGER {obj_type}_sync_trigger
+            BEFORE INSERT OR UPDATE OF json_data ON {obj_type}
+            FOR EACH ROW
+            EXECUTE FUNCTION sync_{obj_type}_columns();
+        """)
     
     def _create_enhanced_features(self):
         """Create PostgreSQL-specific enhanced features."""
