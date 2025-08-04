@@ -84,6 +84,9 @@ class PostgreSQLConnection:
         conninfo, options = self._parse_connection_string(
             connection_info, username, password)
         
+        # Log connection attempt
+        self.log.debug(f"Connecting to PostgreSQL: {self._sanitize_conninfo(conninfo)}")
+        
         # Handle connection pooling if requested
         pool_size = options.get('pool_size', 0)
         if pool_size > 1:
@@ -111,6 +114,8 @@ class PostgreSQLConnection:
         Returns: (conninfo, options) tuple
         """
         options = {}
+        
+        self.log.debug(f"Parsing connection string: {connection_info}")
         
         if connection_info.startswith(("postgresql://", "postgres://")):
             # URL format - parse options from query string
@@ -160,7 +165,16 @@ class PostgreSQLConnection:
         # Add any environment variables not already in conninfo
         self._add_environment_variables(conninfo)
         
+        self.log.debug(f"Final conninfo: {conninfo}, options: {options}")
         return conninfo, options
+    
+    def _sanitize_conninfo(self, conninfo):
+        """Sanitize connection info for logging (hide passwords)."""
+        # Hide password in connection string
+        import re
+        sanitized = re.sub(r'password=[^ ]+', 'password=***', conninfo)
+        sanitized = re.sub(r':[^:@]+@', ':***@', sanitized)
+        return sanitized
     
     def _add_environment_variables(self, conninfo):
         """Add PostgreSQL environment variables to connection string."""
@@ -181,6 +195,7 @@ class PostgreSQLConnection:
     
     def _create_connection(self, conninfo):
         """Create a single database connection."""
+        self.log.debug(f"Creating connection with conninfo: {conninfo}")
         self._connection = psycopg.connect(conninfo)
         self._connection.autocommit = False
     

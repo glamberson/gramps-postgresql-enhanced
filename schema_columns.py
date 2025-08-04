@@ -80,7 +80,7 @@ REQUIRED_COLUMNS = {
         'gramps_id': "json_data->>'gramps_id'",
         'path': "json_data->>'path'",
         'mime': "json_data->>'mime'",
-        'desc': "json_data->>'desc'",
+        'desc_': "json_data->>'desc'",  # desc is a reserved word, so column is desc_
         'checksum': "json_data->>'checksum'",
         'change': "CAST(json_data->>'change' AS INTEGER)",
         'private': "CAST(json_data->>'private' AS BOOLEAN)"

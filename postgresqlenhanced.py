@@ -97,11 +97,25 @@ from schema_columns import REQUIRED_COLUMNS
 MIN_PSYCOPG_VERSION = (3, 1)
 MIN_POSTGRESQL_VERSION = 15
 
+# Import debugging utilities
+try:
+    from .debug_utils import (
+        DebugContext, timed_method, format_sql_query, 
+        QueryProfiler, TransactionTracker, ConnectionMonitor
+    )
+    DEBUG_AVAILABLE = True
+except ImportError:
+    # Fallback if debug_utils not available
+    DEBUG_AVAILABLE = False
+    def timed_method(func):
+        return func
+
 # Create logger
 LOG = logging.getLogger(".PostgreSQLEnhanced")
 
 # Enable debug logging if environment variable is set
-if os.environ.get('GRAMPS_POSTGRESQL_DEBUG'):
+DEBUG_ENABLED = os.environ.get('GRAMPS_POSTGRESQL_DEBUG')
+if DEBUG_ENABLED:
     LOG.setLevel(logging.DEBUG)
     # Also add a file handler for detailed debugging
     debug_handler = logging.FileHandler(
@@ -112,6 +126,9 @@ if os.environ.get('GRAMPS_POSTGRESQL_DEBUG'):
     ))
     LOG.addHandler(debug_handler)
     LOG.debug("Debug logging enabled for PostgreSQL Enhanced")
+    
+    if DEBUG_AVAILABLE:
+        LOG.debug("Advanced debugging features available")
 
 # -------------------------------------------------------------------------
 #
@@ -146,6 +163,12 @@ class PostgreSQLEnhanced(DBAPI):
         self.migration_manager = None
         self.enhanced_queries = None
         self._use_jsonb = True  # Default to using JSONB
+        
+        # Initialize debug context if available
+        self._debug_context = None
+        if DEBUG_ENABLED and DEBUG_AVAILABLE:
+            self._debug_context = DebugContext(LOG)
+            LOG.debug("Debug context initialized")
     
     def get_summary(self):
         """
@@ -243,7 +266,12 @@ class PostgreSQLEnhanced(DBAPI):
         - ?pool_size=10     (connection pool size)
         """
         # Check if this is a Gramps file-based path (like /home/user/.local/share/gramps/grampsdb/xxx)
-        if directory and os.path.isabs(directory) and '/grampsdb/' in directory:
+        # or a test directory with connection_info.txt
+        config_file = os.path.join(directory, 'connection_info.txt') if directory else None
+        if directory and os.path.isabs(directory) and (
+            '/grampsdb/' in directory or 
+            (config_file and os.path.exists(config_file))
+        ):
             # Extract tree name from path
             path_parts = directory.rstrip('/').split('/')
             tree_name = path_parts[-1] if path_parts else 'gramps_default'

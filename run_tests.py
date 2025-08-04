@@ -6,6 +6,10 @@ Test runner with comprehensive logging and debugging for PostgreSQL Enhanced
 import os
 import sys
 import logging
+
+# Configure gramps logging BEFORE importing gramps modules
+logging.getLogger('gramps.gen.utils.grampslocale').setLevel(logging.WARNING)
+
 import argparse
 from datetime import datetime
 
@@ -51,6 +55,7 @@ def setup_logging(debug=False, log_file=None):
     # Configure specific loggers
     loggers_config = {
         'gramps': logging.INFO,
+        'gramps.gen.utils.grampslocale': logging.WARNING,  # Suppress DEBUG messages
         'postgresqlenhanced': logging.DEBUG,
         'psycopg': logging.INFO,
         'test': logging.DEBUG,

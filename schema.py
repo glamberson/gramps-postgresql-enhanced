@@ -221,7 +221,7 @@ class PostgreSQLSchema:
                         col_type = "INTEGER"
                     elif "BOOLEAN" in json_path:
                         col_type = "BOOLEAN"
-                    elif col_name in ['title', 'desc', 'description', 'author', 'pubinfo', 
+                    elif col_name in ['title', 'desc_', 'description', 'author', 'pubinfo', 
                                       'abbrev', 'page', 'name', 'path', 'given_name', 'surname']:
                         col_type = "TEXT"
                     elif col_name in ['father_handle', 'mother_handle', 'source_handle', 

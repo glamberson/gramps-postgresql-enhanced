@@ -1,0 +1,468 @@
+2025-08-04 20:28:28 - root - INFO - setup_logging:64 - ================================================================================
+2025-08-04 20:28:28 - root - INFO - setup_logging:65 - PostgreSQL Enhanced Test Suite
+2025-08-04 20:28:28 - root - INFO - setup_logging:66 - Started: 2025-08-04 20:28:28.453068
+2025-08-04 20:28:28 - root - INFO - setup_logging:67 - Log file: /home/greg/gramps-postgresql-enhanced/test_logs/test_run_20250804_202828.log
+2025-08-04 20:28:28 - root - INFO - setup_logging:68 - Debug mode: False
+2025-08-04 20:28:28 - root - INFO - setup_logging:69 - Python: 3.13.5 (main, Jun 25 2025, 18:55:22) [GCC 14.2.0]
+2025-08-04 20:28:28 - root - INFO - setup_logging:70 - ================================================================================
+2025-08-04 20:28:28 - . - WARNING - <module>:126 - Two Gramps application data directories exist.
+2025-08-04 20:28:28 - .gramps.gen.utils.grampslocale - DEBUG - _init_from_environment:274 - The locale tformat for 'en_US' is '%m/%d/%Y'
+2025-08-04 20:28:28 - .gramps.gen.utils.grampslocale - DEBUG - __init_first_instance:326 - Setting encoding to UTF-8
+2025-08-04 20:28:28 - root - INFO - run_specific_test:110 - Running specific test: person_crud
+2025-08-04 20:28:28 - .PostgreSQLEnhanced - INFO - _load_connection_config:372 - Loading connection config from: /tmp/gramps_test_1754328508/connection_info.txt
+2025-08-04 20:28:28 - .PostgreSQLEnhanced - INFO - _ensure_database_exists:417 - Creating new PostgreSQL database: gramps_test_1754328508
+2025-08-04 20:28:28 - .PostgreSQLEnhanced - INFO - _ensure_database_exists:423 - Successfully created database: gramps_test_1754328508
+2025-08-04 20:28:28 - .PostgreSQLEnhanced - INFO - _initialize:282 - Tree name: 'gramps_test_1754328508', Database: 'gramps_test_1754328508', Mode: 'separate'
+2025-08-04 20:28:28 - .PostgreSQLEnhanced - DEBUG - _parse_connection_string:115 - Parsing connection string: postgresql://genealogy_user:GenealogyData2025@192.168.10.90:5432/gramps_test_1754328508
+2025-08-04 20:28:28 - .PostgreSQLEnhanced - DEBUG - _parse_connection_string:165 - Final conninfo: postgresql://genealogy_user:GenealogyData2025@192.168.10.90:5432/gramps_test_1754328508, options: {}
+2025-08-04 20:28:28 - .PostgreSQLEnhanced - DEBUG - _create_connection:187 - Creating connection with conninfo: postgresql://genealogy_user:GenealogyData2025@192.168.10.90:5432/gramps_test_1754328508
+2025-08-04 20:28:28 - .PostgreSQLEnhanced.Schema - INFO - check_and_init_schema:111 - Creating new PostgreSQL Enhanced schema
+2025-08-04 20:28:28 - .PostgreSQLEnhanced - DEBUG - execute:337 - SQL: 
+                CREATE TABLE IF NOT EXISTS metadata (
+                    setting VARCHAR(255) PRIMARY KEY,
+                    value BYTEA,  -- Keep for compatibility
+                    json_data JSONB,  -- JSONSerializer uses this
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            
+2025-08-04 20:28:28 - .PostgreSQLEnhanced - DEBUG - execute:337 - SQL: 
+                CREATE TABLE IF NOT EXISTS person (
+                    handle VARCHAR(50) PRIMARY KEY,
+                    json_data JSONB NOT NULL,  -- JSONSerializer stores here
+                    given_name TEXT,
+                    surname TEXT,
+                    gramps_id VARCHAR(255),
+                    gender INTEGER,
+                    death_ref_index INTEGER,
+                    birth_ref_index INTEGER,
+                    change INTEGER,
+                    private BOOLEAN,
+                    change_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            
+2025-08-04 20:28:28 - .PostgreSQLEnhanced - DEBUG - execute:337 - SQL: 
+                        CREATE INDEX IF NOT EXISTS idx_person_gramps_id 
+                        ON person (gramps_id)
+                    
+2025-08-04 20:28:28 - .PostgreSQLEnhanced - DEBUG - execute:337 - SQL: 
+                        CREATE INDEX IF NOT EXISTS idx_person_surname 
+                        ON person (surname)
+                    
+2025-08-04 20:28:28 - .PostgreSQLEnhanced - DEBUG - execute:337 - SQL: 
+                CREATE INDEX IF NOT EXISTS idx_person_json 
+                    ON person USING GIN (json_data)
+            
+2025-08-04 20:28:28 - .PostgreSQLEnhanced - DEBUG - execute:337 - SQL: 
+                CREATE INDEX IF NOT EXISTS idx_person_names 
+                    ON person USING GIN ((json_data->'names'))
+            
+2025-08-04 20:28:28 - .PostgreSQLEnhanced - DEBUG - execute:337 - SQL: 
+                CREATE INDEX IF NOT EXISTS idx_person_birth_date 
+                    ON person ((json_data->'birth_ref_index'->>'date'))
+            
+2025-08-04 20:28:28 - .PostgreSQLEnhanced - DEBUG - execute:337 - SQL: 
+                CREATE TABLE IF NOT EXISTS family (
+                    handle VARCHAR(50) PRIMARY KEY,
+                    json_data JSONB NOT NULL,  -- JSONSerializer stores here
+                    gramps_id VARCHAR(255),
+                    father_handle VARCHAR(50),
+                    mother_handle VARCHAR(50),
+                    change INTEGER,
+                    private BOOLEAN,
+                    change_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            
+2025-08-04 20:28:28 - .PostgreSQLEnhanced - DEBUG - execute:337 - SQL: 
+                        CREATE INDEX IF NOT EXISTS idx_family_gramps_id 
+                        ON family (gramps_id)
+                    
+2025-08-04 20:28:28 - .PostgreSQLEnhanced - DEBUG - execute:337 - SQL: 
+                CREATE INDEX IF NOT EXISTS idx_family_json 
+                    ON family USING GIN (json_data)
+            
+2025-08-04 20:28:28 - .PostgreSQLEnhanced - DEBUG - execute:337 - SQL: 
+                CREATE INDEX IF NOT EXISTS idx_family_parents 
+                    ON family USING GIN ((json_data->'parent_handles'))
+            
+2025-08-04 20:28:28 - .PostgreSQLEnhanced - DEBUG - execute:337 - SQL: 
+                CREATE TABLE IF NOT EXISTS event (
+                    handle VARCHAR(50) PRIMARY KEY,
+                    json_data JSONB NOT NULL,  -- JSONSerializer stores here
+                    gramps_id VARCHAR(255),
+                    description TEXT,
+                    place VARCHAR(50),
+                    change INTEGER,
+                    private BOOLEAN,
+                    change_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            
+2025-08-04 20:28:28 - .PostgreSQLEnhanced - DEBUG - execute:337 - SQL: 
+                        CREATE INDEX IF NOT EXISTS idx_event_gramps_id 
+                        ON event (gramps_id)
+                    
+2025-08-04 20:28:28 - .PostgreSQLEnhanced - DEBUG - execute:337 - SQL: 
+                CREATE INDEX IF NOT EXISTS idx_event_json 
+                    ON event USING GIN (json_data)
+            
+2025-08-04 20:28:28 - .PostgreSQLEnhanced - DEBUG - execute:337 - SQL: 
+                CREATE INDEX IF NOT EXISTS idx_event_type_date 
+                    ON event ((json_data->>'type'), (json_data->>'date'))
+            
+2025-08-04 20:28:28 - .PostgreSQLEnhanced - DEBUG - execute:337 - SQL: 
+                CREATE TABLE IF NOT EXISTS place (
+                    handle VARCHAR(50) PRIMARY KEY,
+                    json_data JSONB NOT NULL,  -- JSONSerializer stores here
+                    enclosed_by VARCHAR(50),
+                    gramps_id VARCHAR(255),
+                    title TEXT,
+                    long VARCHAR(255),
+                    lat VARCHAR(255),
+                    code VARCHAR(255),
+                    change INTEGER,
+                    private BOOLEAN,
+                    change_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            
+2025-08-04 20:28:28 - .PostgreSQLEnhanced - DEBUG - execute:337 - SQL: 
+                        CREATE INDEX IF NOT EXISTS idx_place_gramps_id 
+                        ON place (gramps_id)
+                    
+2025-08-04 20:28:28 - .PostgreSQLEnhanced - DEBUG - execute:337 - SQL: 
+                        CREATE INDEX IF NOT EXISTS idx_place_enclosed_by 
+                        ON place (enclosed_by)
+                    
+2025-08-04 20:28:28 - .PostgreSQLEnhanced - DEBUG - execute:337 - SQL: 
+                CREATE INDEX IF NOT EXISTS idx_place_json 
+                    ON place USING GIN (json_data)
+            
+2025-08-04 20:28:28 - .PostgreSQLEnhanced - DEBUG - execute:337 - SQL: 
+                CREATE INDEX IF NOT EXISTS idx_place_hierarchy 
+                    ON place USING GIN ((json_data->'placeref_list'))
+            
+2025-08-04 20:28:28 - .PostgreSQLEnhanced - DEBUG - execute:337 - SQL: 
+                CREATE TABLE IF NOT EXISTS source (
+                    handle VARCHAR(50) PRIMARY KEY,
+                    json_data JSONB NOT NULL,  -- JSONSerializer stores here
+                    gramps_id VARCHAR(255),
+                    title TEXT,
+                    author TEXT,
+                    pubinfo TEXT,
+                    abbrev TEXT,
+                    change INTEGER,
+                    private BOOLEAN,
+                    change_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            
+2025-08-04 20:28:28 - .PostgreSQLEnhanced - DEBUG - execute:337 - SQL: 
+                        CREATE INDEX IF NOT EXISTS idx_source_gramps_id 
+                        ON source (gramps_id)
+                    
+2025-08-04 20:28:28 - .PostgreSQLEnhanced - DEBUG - execute:337 - SQL: 
+                CREATE INDEX IF NOT EXISTS idx_source_json 
+                    ON source USING GIN (json_data)
+            
+2025-08-04 20:28:28 - .PostgreSQLEnhanced - DEBUG - execute:337 - SQL: 
+                CREATE INDEX IF NOT EXISTS idx_source_title 
+                    ON source ((json_data->>'title'))
+            
+2025-08-04 20:28:28 - .PostgreSQLEnhanced - DEBUG - execute:337 - SQL: 
+                CREATE TABLE IF NOT EXISTS citation (
+                    handle VARCHAR(50) PRIMARY KEY,
+                    json_data JSONB NOT NULL,  -- JSONSerializer stores here
+                    gramps_id VARCHAR(255),
+                    page TEXT,
+                    confidence INTEGER,
+                    source_handle VARCHAR(50),
+                    change INTEGER,
+                    private BOOLEAN,
+                    change_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            
+2025-08-04 20:28:28 - .PostgreSQLEnhanced - DEBUG - execute:337 - SQL: 
+                        CREATE INDEX IF NOT EXISTS idx_citation_gramps_id 
+                        ON citation (gramps_id)
+                    
+2025-08-04 20:28:28 - .PostgreSQLEnhanced - DEBUG - execute:337 - SQL: 
+                CREATE INDEX IF NOT EXISTS idx_citation_json 
+                    ON citation USING GIN (json_data)
+            
+2025-08-04 20:28:28 - .PostgreSQLEnhanced - DEBUG - execute:337 - SQL: 
+                CREATE TABLE IF NOT EXISTS media (
+                    handle VARCHAR(50) PRIMARY KEY,
+                    json_data JSONB NOT NULL,  -- JSONSerializer stores here
+                    gramps_id VARCHAR(255),
+                    path TEXT,
+                    mime VARCHAR(255),
+                    desc_ TEXT,
+                    checksum VARCHAR(255),
+                    change INTEGER,
+                    private BOOLEAN,
+                    change_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            
+2025-08-04 20:28:28 - .PostgreSQLEnhanced - DEBUG - execute:337 - SQL: 
+                        CREATE INDEX IF NOT EXISTS idx_media_gramps_id 
+                        ON media (gramps_id)
+                    
+2025-08-04 20:28:28 - .PostgreSQLEnhanced - DEBUG - execute:337 - SQL: 
+                CREATE INDEX IF NOT EXISTS idx_media_json 
+                    ON media USING GIN (json_data)
+            
+2025-08-04 20:28:28 - .PostgreSQLEnhanced - DEBUG - execute:337 - SQL: 
+                CREATE TABLE IF NOT EXISTS repository (
+                    handle VARCHAR(50) PRIMARY KEY,
+                    json_data JSONB NOT NULL,  -- JSONSerializer stores here
+                    gramps_id VARCHAR(255),
+                    name TEXT,
+                    change INTEGER,
+                    private BOOLEAN,
+                    change_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            
+2025-08-04 20:28:28 - .PostgreSQLEnhanced - DEBUG - execute:337 - SQL: 
+                        CREATE INDEX IF NOT EXISTS idx_repository_gramps_id 
+                        ON repository (gramps_id)
+                    
+2025-08-04 20:28:28 - .PostgreSQLEnhanced - DEBUG - execute:337 - SQL: 
+                CREATE INDEX IF NOT EXISTS idx_repository_json 
+                    ON repository USING GIN (json_data)
+            
+2025-08-04 20:28:28 - .PostgreSQLEnhanced - DEBUG - execute:337 - SQL: 
+                CREATE TABLE IF NOT EXISTS note (
+                    handle VARCHAR(50) PRIMARY KEY,
+                    json_data JSONB NOT NULL,  -- JSONSerializer stores here
+                    gramps_id VARCHAR(255),
+                    format INTEGER,
+                    change INTEGER,
+                    private BOOLEAN,
+                    change_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            
+2025-08-04 20:28:28 - .PostgreSQLEnhanced - DEBUG - execute:337 - SQL: 
+                        CREATE INDEX IF NOT EXISTS idx_note_gramps_id 
+                        ON note (gramps_id)
+                    
+2025-08-04 20:28:28 - .PostgreSQLEnhanced - DEBUG - execute:337 - SQL: 
+                CREATE INDEX IF NOT EXISTS idx_note_json 
+                    ON note USING GIN (json_data)
+            
+2025-08-04 20:28:28 - .PostgreSQLEnhanced - DEBUG - execute:337 - SQL: 
+                    SELECT EXISTS (
+                        SELECT 1 FROM pg_extension WHERE extname = 'pg_trgm'
+                    )
+                
+2025-08-04 20:28:28 - .PostgreSQLEnhanced - DEBUG - execute:337 - SQL: 
+                        CREATE INDEX IF NOT EXISTS idx_note_text_trgm
+                            ON note USING GIN ((json_data->>'text') gin_trgm_ops)
+                    
+2025-08-04 20:28:28 - .PostgreSQLEnhanced - DEBUG - execute:337 - SQL: 
+                CREATE TABLE IF NOT EXISTS tag (
+                    handle VARCHAR(50) PRIMARY KEY,
+                    json_data JSONB NOT NULL,  -- JSONSerializer stores here
+                    name TEXT,
+                    color VARCHAR(255),
+                    priority INTEGER,
+                    change INTEGER,
+                    change_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            
+2025-08-04 20:28:28 - .PostgreSQLEnhanced - DEBUG - execute:337 - SQL: 
+                        CREATE INDEX IF NOT EXISTS idx_tag_name 
+                        ON tag (name)
+                    
+2025-08-04 20:28:28 - .PostgreSQLEnhanced - DEBUG - execute:337 - SQL: 
+                CREATE INDEX IF NOT EXISTS idx_tag_json 
+                    ON tag USING GIN (json_data)
+            
+2025-08-04 20:28:28 - .PostgreSQLEnhanced - DEBUG - execute:337 - SQL: 
+            CREATE TABLE IF NOT EXISTS reference (
+                obj_handle VARCHAR(50),
+                obj_class VARCHAR(50),
+                ref_handle VARCHAR(50),
+                ref_class VARCHAR(50),
+                PRIMARY KEY (obj_handle, obj_class, ref_handle, ref_class)
+            )
+        
+2025-08-04 20:28:28 - .PostgreSQLEnhanced - DEBUG - execute:337 - SQL: 
+            CREATE INDEX IF NOT EXISTS idx_reference_ref 
+                ON reference (ref_handle, ref_class)
+        
+2025-08-04 20:28:28 - .PostgreSQLEnhanced - DEBUG - execute:337 - SQL: 
+            CREATE INDEX IF NOT EXISTS idx_reference_obj 
+                ON reference (obj_handle, obj_class)
+        
+2025-08-04 20:28:28 - .PostgreSQLEnhanced - DEBUG - execute:337 - SQL: 
+            CREATE TABLE IF NOT EXISTS gender_stats (
+                given_name VARCHAR(255) PRIMARY KEY,
+                male INTEGER DEFAULT 0,
+                female INTEGER DEFAULT 0,
+                unknown INTEGER DEFAULT 0
+            )
+        
+2025-08-04 20:28:28 - .PostgreSQLEnhanced - DEBUG - execute:337 - SQL: 
+            CREATE TABLE IF NOT EXISTS surname (
+                surname VARCHAR(255) PRIMARY KEY,
+                count INTEGER DEFAULT 0
+            )
+        
+2025-08-04 20:28:28 - .PostgreSQLEnhanced - DEBUG - execute:337 - SQL: 
+            CREATE TABLE IF NOT EXISTS name_group (
+                name VARCHAR(255) PRIMARY KEY,
+                grouping VARCHAR(255)
+            )
+        
+2025-08-04 20:28:28 - .PostgreSQLEnhanced - DEBUG - execute:337 - SQL: 
+            CREATE OR REPLACE FUNCTION get_person_name(json_data JSONB)
+            RETURNS TEXT AS $$
+            DECLARE
+                name_obj JSONB;
+            BEGIN
+                name_obj := json_data->'names'->0;
+                RETURN COALESCE(
+                    name_obj->>'first_name' || ' ' || name_obj->>'surname',
+                    name_obj->>'first_name',
+                    name_obj->>'surname',
+                    'Unknown'
+                );
+            END;
+            $$ LANGUAGE plpgsql IMMUTABLE PARALLEL SAFE;
+        
+2025-08-04 20:28:28 - .PostgreSQLEnhanced - DEBUG - execute:337 - SQL: 
+            CREATE OR REPLACE FUNCTION get_family_members(family_handle TEXT)
+            RETURNS TABLE(handle TEXT, role TEXT) AS $$
+            BEGIN
+                -- Get parents
+                RETURN QUERY
+                SELECT jsonb_array_elements_text(f.json_data->'parent_handles'), 'parent'::TEXT
+                FROM family f
+                WHERE f.handle = family_handle;
+                
+                -- Get children
+                RETURN QUERY
+                SELECT jsonb_array_elements_text(f.json_data->'child_ref_list'), 'child'::TEXT
+                FROM family f
+                WHERE f.handle = family_handle;
+            END;
+            $$ LANGUAGE plpgsql STABLE PARALLEL SAFE;
+        
+2025-08-04 20:28:28 - .PostgreSQLEnhanced - DEBUG - execute:337 - SQL: 
+            SELECT COUNT(*) FROM pg_available_extensions 
+            WHERE name = %s
+        
+2025-08-04 20:28:28 - .PostgreSQLEnhanced - DEBUG - execute:339 - Args: ['pg_trgm']
+2025-08-04 20:28:28 - .PostgreSQLEnhanced - DEBUG - execute:337 - SQL: CREATE EXTENSION IF NOT EXISTS pg_trgm
+2025-08-04 20:28:28 - .PostgreSQLEnhanced.Schema - INFO - _enable_useful_extensions:393 - Enabled pg_trgm extension: Trigram similarity searches
+2025-08-04 20:28:28 - .PostgreSQLEnhanced - DEBUG - execute:337 - SQL: 
+            SELECT COUNT(*) FROM pg_available_extensions 
+            WHERE name = %s
+        
+2025-08-04 20:28:28 - .PostgreSQLEnhanced - DEBUG - execute:339 - Args: ['btree_gin']
+2025-08-04 20:28:28 - .PostgreSQLEnhanced - DEBUG - execute:337 - SQL: CREATE EXTENSION IF NOT EXISTS btree_gin
+2025-08-04 20:28:28 - .PostgreSQLEnhanced.Schema - INFO - _enable_useful_extensions:393 - Enabled btree_gin extension: Better GIN index performance
+2025-08-04 20:28:28 - .PostgreSQLEnhanced - DEBUG - execute:337 - SQL: 
+            SELECT COUNT(*) FROM pg_available_extensions 
+            WHERE name = %s
+        
+2025-08-04 20:28:28 - .PostgreSQLEnhanced - DEBUG - execute:339 - Args: ['intarray']
+2025-08-04 20:28:28 - .PostgreSQLEnhanced - DEBUG - execute:337 - SQL: CREATE EXTENSION IF NOT EXISTS intarray
+2025-08-04 20:28:28 - .PostgreSQLEnhanced.Schema - INFO - _enable_useful_extensions:393 - Enabled intarray extension: Array operations
+2025-08-04 20:28:28 - .PostgreSQLEnhanced - DEBUG - execute:337 - SQL: 
+                INSERT INTO metadata (setting, value, json_data)
+                VALUES ('schema_version', %s, %s)
+                ON CONFLICT (setting) DO UPDATE
+                SET value = EXCLUDED.value,
+                    json_data = EXCLUDED.json_data,
+                    updated_at = CURRENT_TIMESTAMP
+            
+2025-08-04 20:28:28 - .PostgreSQLEnhanced - DEBUG - execute:339 - Args: [b'\x80\x04K\x15.', Jsonb(21)]
+2025-08-04 20:28:28 - .PostgreSQLEnhanced.Schema - INFO - _create_schema:209 - PostgreSQL Enhanced schema created successfully
+2025-08-04 20:28:28 - .PostgreSQLEnhanced - INFO - _initialize:318 - PostgreSQL Enhanced initialized successfully
+2025-08-04 20:28:28 - .Db - DEBUG - _txn_begin:272 -     DBAPI 0x7fe4120774d0 transaction begin
+2025-08-04 20:28:28 - .PostgreSQLEnhanced - DEBUG - execute:337 - SQL: SAVEPOINT sp_0
+2025-08-04 20:28:28 - .PostgreSQLEnhanced - DEBUG - execute:337 - SQL: SELECT 1 FROM metadata WHERE setting = %s
+2025-08-04 20:28:28 - .PostgreSQLEnhanced - DEBUG - execute:339 - Args: ['version']
+2025-08-04 20:28:28 - .PostgreSQLEnhanced - DEBUG - execute:337 - SQL: INSERT INTO metadata (setting, json_data) VALUES (%s, %s)
+2025-08-04 20:28:28 - .PostgreSQLEnhanced - DEBUG - execute:339 - Args: ['version', '{"type":"str","value":"21"}']
+2025-08-04 20:28:28 - .Db - DEBUG - _txn_commit:281 -     DBAPI 0x7fe4120774d0 transaction commit
+2025-08-04 20:28:28 - .Db - DEBUG - __init__:150 - DbTxn 0x7fe4120fade0 instantiated for 'Create test person'. Called from file test_postgresql_enhanced.py, line 204, in test_person_crud
+2025-08-04 20:28:28 - .Db - DEBUG - __enter__:73 -     DbTxn 0x7fe4120fade0 entered
+2025-08-04 20:28:28 - .Db - DEBUG - transaction_begin:306 -     DBAPI 0x7fe4120774d0 transaction begin for 'Create test person'
+2025-08-04 20:28:28 - .PostgreSQLEnhanced - DEBUG - execute:337 - SQL: SAVEPOINT sp_1
+2025-08-04 20:28:28 - .PostgreSQLEnhanced - DEBUG - execute:337 - SQL: SELECT 1 FROM person WHERE handle = %s
+2025-08-04 20:28:28 - .PostgreSQLEnhanced - DEBUG - execute:339 - Args: ['ff49d4697f231e10bac102850f2']
+2025-08-04 20:28:28 - .serialize - DEBUG - object_to_string:142 - json, object_to_string: <gramps.gen.lib.person.Person object at 0x7fe412077e00>
+2025-08-04 20:28:28 - .PostgreSQLEnhanced - DEBUG - execute:337 - SQL: INSERT INTO person (handle, json_data) VALUES (%s, %s)
+2025-08-04 20:28:28 - .PostgreSQLEnhanced - DEBUG - execute:339 - Args: ['ff49d4697f231e10bac102850f2', '{"handle":"ff49d4697f231e10bac102850f2","change":1754328508,"private":false,"tag_list":[],"gramps_id":"I0001","citation_list":[],"note_list":[],"media_list":[],"event_ref_list":[],"attribute_list":[{"private":false,"type":{"_class":"AttributeType","value":7,"string":""},"value":"Testy","citation_list":[],"note_list":[],"_class":"Attribute"}],"address_list":[],"urls":[{"private":false,"path":"https://example.com","desc":"","type":{"_class":"UrlType","value":2,"string":""},"_class":"Url"}],"lds_ord_list":[],"primary_name":{"private":false,"surname_list":[{"surname":"Person","prefix":"","primary":true,"origintype":{"_class":"NameOriginType","value":1,"string":""},"connector":"","_class":"Surname"}],"citation_list":[],"note_list":[],"date":{"format":null,"calendar":0,"modifier":0,"quality":0,"dateval":[0,0,0,false],"text":"","sortval":0,"newyear":0,"_class":"Date"},"first_name":"Test","suffix":"","title":"","type":{"_class":"NameType","value":2,"string":""},"group_as":"","sort_as":0,"display_as":0,"call":"","nick":"","famnick":"","_class":"Name"},"family_list":[],"parent_family_list":[],"alternate_names":[],"person_ref_list":[],"death_ref_index":-1,"birth_ref_index":-1,"_class":"Person","gender":1}']
+2025-08-04 20:28:28 - .serialize - DEBUG - object_to_data:147 - json, object_to_string: <gramps.gen.lib.person.Person object at 0x7fe412077e00>
+2025-08-04 20:28:28 - .PostgreSQLEnhanced - DEBUG - execute:337 - SQL: 
+                    UPDATE person 
+                    SET given_name = (json_data->'primary_name'->>'first_name'), surname = (json_data->'primary_name'->'surname_list'->0->>'surname'), gramps_id = (json_data->>'gramps_id'), gender = (CAST(json_data->>'gender' AS INTEGER)), death_ref_index = (CAST(json_data->>'death_ref_index' AS INTEGER)), birth_ref_index = (CAST(json_data->>'birth_ref_index' AS INTEGER)), change = (CAST(json_data->>'change' AS INTEGER)), private = (CAST(json_data->>'private' AS BOOLEAN))
+                    WHERE handle = %s
+                
+2025-08-04 20:28:28 - .PostgreSQLEnhanced - DEBUG - execute:339 - Args: ['ff49d4697f231e10bac102850f2']
+2025-08-04 20:28:28 - .PostgreSQLEnhanced - DEBUG - execute:337 - SQL: SELECT ref_class, ref_handle FROM reference WHERE obj_handle = %s
+2025-08-04 20:28:28 - .PostgreSQLEnhanced - DEBUG - execute:339 - Args: ['ff49d4697f231e10bac102850f2']
+2025-08-04 20:28:28 - .PostgreSQLEnhanced - DEBUG - execute:337 - SQL: DELETE FROM reference WHERE obj_handle = %s
+2025-08-04 20:28:28 - .PostgreSQLEnhanced - DEBUG - execute:339 - Args: ['ff49d4697f231e10bac102850f2']
+2025-08-04 20:28:28 - .serialize - DEBUG - object_to_data:147 - json, object_to_string: <gramps.gen.lib.person.Person object at 0x7fe412077e00>
+2025-08-04 20:28:28 - .Db - DEBUG - add:201 - added to trans: 0 0 ff49d4697f231e10bac102850f2
+2025-08-04 20:28:28 - .Db - DEBUG - transaction_commit:324 -     DBAPI 0x7fe4120774d0 transaction commit for 'Create test person'
+2025-08-04 20:28:28 - .Db - DEBUG - __exit__:92 -     **** DbTxn 0x7fe4120fade0 exited. Called from file /home/greg/gramps-postgresql-enhanced/test_postgresql_enhanced.py, line 204, in test_person_crud **** 0.00 seconds
+2025-08-04 20:28:28 - .PostgreSQLEnhanced - DEBUG - execute:337 - SQL: SELECT json_data FROM person WHERE handle = %s
+2025-08-04 20:28:28 - .PostgreSQLEnhanced - DEBUG - execute:339 - Args: ['ff49d4697f231e10bac102850f2']
+2025-08-04 20:28:28 - .serialize - DEBUG - string_to_data:137 - json, string_to_data: '{"urls": [{"desc": "", "path": "https://example.com", "type": {"v'...
+2025-08-04 20:28:28 - .serialize - DEBUG - data_to_object:127 - json, data_to_object: {'urls': [{'desc': '', 'path': 'https://example.com', 'type': {'value': 2, '_class': 'UrlType', 'string': ''}, '_class': 'Url', 'private': False}], '_class': 'Person', 'change': 1754328508, 'gender': 1, 'handle': 'ff49d4697f231e10bac102850f2', 'private': False, 'tag_list': [], 'gramps_id': 'I0001', 'note_list': [], 'media_list': [], 'family_list': [], 'address_list': [], 'lds_ord_list': [], 'primary_name': {'call': '', 'date': {'text': '', '_class': 'Date', 'format': None, 'dateval': [0, 0, 0, False], 'newyear': 0, 'quality': 0, 'sortval': 0, 'calendar': 0, 'modifier': 0}, 'nick': '', 'type': {'value': 2, '_class': 'NameType', 'string': ''}, 'title': '', '_class': 'Name', 'suffix': '', 'famnick': '', 'private': False, 'sort_as': 0, 'group_as': '', 'note_list': [], 'display_as': 0, 'first_name': 'Test', 'surname_list': [{'_class': 'Surname', 'prefix': '', 'primary': True, 'surname': 'Person', 'connector': '', 'origintype': {'value': 1, '_class': 'NameOriginType', 'string': ''}}], 'citation_list': []}, 'citation_list': [], 'attribute_list': [{'type': {'value': 7, '_class': 'AttributeType', 'string': ''}, 'value': 'Testy', '_class': 'Attribute', 'private': False, 'note_list': [], 'citation_list': []}], 'event_ref_list': [], 'alternate_names': [], 'birth_ref_index': -1, 'death_ref_index': -1, 'person_ref_list': [], 'parent_family_list': []}
+2025-08-04 20:28:28 - .Db - DEBUG - __init__:150 - DbTxn 0x7fe4120fb4a0 instantiated for 'Update test person'. Called from file test_postgresql_enhanced.py, line 220, in test_person_crud
+2025-08-04 20:28:28 - .Db - DEBUG - __enter__:73 -     DbTxn 0x7fe4120fb4a0 entered
+2025-08-04 20:28:28 - .Db - DEBUG - transaction_begin:306 -     DBAPI 0x7fe4120774d0 transaction begin for 'Update test person'
+2025-08-04 20:28:28 - .PostgreSQLEnhanced - DEBUG - execute:337 - SQL: SAVEPOINT sp_2
+2025-08-04 20:28:28 - .PostgreSQLEnhanced - DEBUG - execute:337 - SQL: SELECT 1 FROM person WHERE handle = %s
+2025-08-04 20:28:28 - .PostgreSQLEnhanced - DEBUG - execute:339 - Args: ['ff49d4697f231e10bac102850f2']
+2025-08-04 20:28:28 - .PostgreSQLEnhanced - DEBUG - execute:337 - SQL: SELECT json_data FROM person WHERE handle = %s
+2025-08-04 20:28:28 - .PostgreSQLEnhanced - DEBUG - execute:339 - Args: ['ff49d4697f231e10bac102850f2']
+2025-08-04 20:28:28 - .serialize - DEBUG - string_to_data:137 - json, string_to_data: '{"urls": [{"desc": "", "path": "https://example.com", "type": {"v'...
+2025-08-04 20:28:28 - .serialize - DEBUG - object_to_string:142 - json, object_to_string: <gramps.gen.lib.person.Person object at 0x7fe411f7cf50>
+2025-08-04 20:28:28 - .PostgreSQLEnhanced - DEBUG - execute:337 - SQL: UPDATE person SET json_data = %s WHERE handle = %s
+2025-08-04 20:28:28 - .PostgreSQLEnhanced - DEBUG - execute:339 - Args: ['{"urls":[{"desc":"","path":"https://example.com","type":{"_class":"UrlType","value":2,"string":""},"private":false,"_class":"Url"}],"change":1754328508,"handle":"ff49d4697f231e10bac102850f2","private":false,"tag_list":[],"gramps_id":"I0001","note_list":[],"media_list":[],"family_list":[],"address_list":[],"lds_ord_list":[],"primary_name":{"call":"","date":{"text":"","format":null,"dateval":[0,0,0,false],"newyear":0,"quality":0,"sortval":0,"calendar":0,"modifier":0,"_class":"Date"},"nick":"","type":{"_class":"NameType","value":2,"string":""},"title":"","suffix":"","famnick":"","private":false,"sort_as":0,"group_as":"","note_list":[],"display_as":0,"first_name":"Updated","surname_list":[{"prefix":"","primary":true,"surname":"Person","connector":"","origintype":{"_class":"NameOriginType","value":1,"string":""},"_class":"Surname"}],"citation_list":[],"_class":"Name"},"citation_list":[],"attribute_list":[{"type":{"_class":"AttributeType","value":7,"string":""},"value":"Testy","private":false,"note_list":[],"citation_list":[],"_class":"Attribute"}],"event_ref_list":[],"alternate_names":[],"birth_ref_index":-1,"death_ref_index":-1,"person_ref_list":[],"parent_family_list":[],"_class":"Person","gender":1}', 'ff49d4697f231e10bac102850f2']
+2025-08-04 20:28:28 - .serialize - DEBUG - object_to_data:147 - json, object_to_string: <gramps.gen.lib.person.Person object at 0x7fe411f7cf50>
+2025-08-04 20:28:28 - .PostgreSQLEnhanced - DEBUG - execute:337 - SQL: 
+                    UPDATE person 
+                    SET given_name = (json_data->'primary_name'->>'first_name'), surname = (json_data->'primary_name'->'surname_list'->0->>'surname'), gramps_id = (json_data->>'gramps_id'), gender = (CAST(json_data->>'gender' AS INTEGER)), death_ref_index = (CAST(json_data->>'death_ref_index' AS INTEGER)), birth_ref_index = (CAST(json_data->>'birth_ref_index' AS INTEGER)), change = (CAST(json_data->>'change' AS INTEGER)), private = (CAST(json_data->>'private' AS BOOLEAN))
+                    WHERE handle = %s
+                
+2025-08-04 20:28:28 - .PostgreSQLEnhanced - DEBUG - execute:339 - Args: ['ff49d4697f231e10bac102850f2']
+2025-08-04 20:28:28 - .PostgreSQLEnhanced - DEBUG - execute:337 - SQL: SELECT ref_class, ref_handle FROM reference WHERE obj_handle = %s
+2025-08-04 20:28:28 - .PostgreSQLEnhanced - DEBUG - execute:339 - Args: ['ff49d4697f231e10bac102850f2']
+2025-08-04 20:28:28 - .PostgreSQLEnhanced - DEBUG - execute:337 - SQL: DELETE FROM reference WHERE obj_handle = %s
+2025-08-04 20:28:28 - .PostgreSQLEnhanced - DEBUG - execute:339 - Args: ['ff49d4697f231e10bac102850f2']
+2025-08-04 20:28:28 - .serialize - DEBUG - object_to_data:147 - json, object_to_string: <gramps.gen.lib.person.Person object at 0x7fe411f7cf50>
+2025-08-04 20:28:28 - .Db - DEBUG - add:201 - added to trans: 0 1 ff49d4697f231e10bac102850f2
+2025-08-04 20:28:28 - .serialize - DEBUG - data_to_object:127 - json, data_to_object: {'urls': [{'desc': '', 'path': 'https://example.com', 'type': {'value': 2, '_class': 'UrlType', 'string': ''}, '_class': 'Url', 'private': False}], '_class': 'Person', 'change': 1754328508, 'gender': 1, 'handle': 'ff49d4697f231e10bac102850f2', 'private': False, 'tag_list': [], 'gramps_id': 'I0001', 'note_list': [], 'media_list': [], 'family_list': [], 'address_list': [], 'lds_ord_list': [], 'primary_name': {'call': '', 'date': {'text': '', '_class': 'Date', 'format': None, 'dateval': [0, 0, 0, False], 'newyear': 0, 'quality': 0, 'sortval': 0, 'calendar': 0, 'modifier': 0}, 'nick': '', 'type': {'value': 2, '_class': 'NameType', 'string': ''}, 'title': '', '_class': 'Name', 'suffix': '', 'famnick': '', 'private': False, 'sort_as': 0, 'group_as': '', 'note_list': [], 'display_as': 0, 'first_name': 'Test', 'surname_list': [{'_class': 'Surname', 'prefix': '', 'primary': True, 'surname': 'Person', 'connector': '', 'origintype': {'value': 1, '_class': 'NameOriginType', 'string': ''}}], 'citation_list': []}, 'citation_list': [], 'attribute_list': [{'type': {'value': 7, '_class': 'AttributeType', 'string': ''}, 'value': 'Testy', '_class': 'Attribute', 'private': False, 'note_list': [], 'citation_list': []}], 'event_ref_list': [], 'alternate_names': [], 'birth_ref_index': -1, 'death_ref_index': -1, 'person_ref_list': [], 'parent_family_list': []}
+2025-08-04 20:28:28 - .Db - DEBUG - transaction_commit:324 -     DBAPI 0x7fe4120774d0 transaction commit for 'Update test person'
+2025-08-04 20:28:28 - .Db - DEBUG - __exit__:92 -     **** DbTxn 0x7fe4120fb4a0 exited. Called from file /home/greg/gramps-postgresql-enhanced/test_postgresql_enhanced.py, line 220, in test_person_crud **** 0.00 seconds
+2025-08-04 20:28:28 - .PostgreSQLEnhanced - DEBUG - execute:337 - SQL: SELECT json_data FROM person WHERE handle = %s
+2025-08-04 20:28:28 - .PostgreSQLEnhanced - DEBUG - execute:339 - Args: ['ff49d4697f231e10bac102850f2']
+2025-08-04 20:28:28 - .serialize - DEBUG - string_to_data:137 - json, string_to_data: '{"urls": [{"desc": "", "path": "https://example.com", "type": {"v'...
+2025-08-04 20:28:28 - .serialize - DEBUG - data_to_object:127 - json, data_to_object: {'urls': [{'desc': '', 'path': 'https://example.com', 'type': {'value': 2, '_class': 'UrlType', 'string': ''}, '_class': 'Url', 'private': False}], '_class': 'Person', 'change': 1754328508, 'gender': 1, 'handle': 'ff49d4697f231e10bac102850f2', 'private': False, 'tag_list': [], 'gramps_id': 'I0001', 'note_list': [], 'media_list': [], 'family_list': [], 'address_list': [], 'lds_ord_list': [], 'primary_name': {'call': '', 'date': {'text': '', '_class': 'Date', 'format': None, 'dateval': [0, 0, 0, False], 'newyear': 0, 'quality': 0, 'sortval': 0, 'calendar': 0, 'modifier': 0}, 'nick': '', 'type': {'value': 2, '_class': 'NameType', 'string': ''}, 'title': '', '_class': 'Name', 'suffix': '', 'famnick': '', 'private': False, 'sort_as': 0, 'group_as': '', 'note_list': [], 'display_as': 0, 'first_name': 'Updated', 'surname_list': [{'_class': 'Surname', 'prefix': '', 'primary': True, 'surname': 'Person', 'connector': '', 'origintype': {'value': 1, '_class': 'NameOriginType', 'string': ''}}], 'citation_list': []}, 'citation_list': [], 'attribute_list': [{'type': {'value': 7, '_class': 'AttributeType', 'string': ''}, 'value': 'Testy', '_class': 'Attribute', 'private': False, 'note_list': [], 'citation_list': []}], 'event_ref_list': [], 'alternate_names': [], 'birth_ref_index': -1, 'death_ref_index': -1, 'person_ref_list': [], 'parent_family_list': []}
+2025-08-04 20:28:28 - .Db - DEBUG - __init__:150 - DbTxn 0x7fe4120fb530 instantiated for 'Delete test person'. Called from file test_postgresql_enhanced.py, line 228, in test_person_crud
+2025-08-04 20:28:28 - .Db - DEBUG - __enter__:73 -     DbTxn 0x7fe4120fb530 entered
+2025-08-04 20:28:28 - .Db - DEBUG - transaction_begin:306 -     DBAPI 0x7fe4120774d0 transaction begin for 'Delete test person'
+2025-08-04 20:28:28 - .PostgreSQLEnhanced - DEBUG - execute:337 - SQL: SAVEPOINT sp_3
+2025-08-04 20:28:28 - .PostgreSQLEnhanced - DEBUG - execute:337 - SQL: SELECT 1 FROM person WHERE handle = %s
+2025-08-04 20:28:28 - .PostgreSQLEnhanced - DEBUG - execute:339 - Args: ['ff49d4697f231e10bac102850f2']
+2025-08-04 20:28:28 - .PostgreSQLEnhanced - DEBUG - execute:337 - SQL: SELECT json_data FROM person WHERE handle = %s
+2025-08-04 20:28:28 - .PostgreSQLEnhanced - DEBUG - execute:339 - Args: ['ff49d4697f231e10bac102850f2']
+2025-08-04 20:28:28 - .serialize - DEBUG - string_to_data:137 - json, string_to_data: '{"urls": [{"desc": "", "path": "https://example.com", "type": {"v'...
+2025-08-04 20:28:28 - .PostgreSQLEnhanced - DEBUG - execute:337 - SQL: SELECT ref_class, ref_handle FROM reference WHERE obj_handle = %s
+2025-08-04 20:28:28 - .PostgreSQLEnhanced - DEBUG - execute:339 - Args: ['ff49d4697f231e10bac102850f2']
+2025-08-04 20:28:28 - .PostgreSQLEnhanced - DEBUG - execute:337 - SQL: DELETE FROM reference WHERE obj_handle = %s;
+2025-08-04 20:28:28 - .PostgreSQLEnhanced - DEBUG - execute:339 - Args: ['ff49d4697f231e10bac102850f2']
+2025-08-04 20:28:28 - .PostgreSQLEnhanced - DEBUG - execute:337 - SQL: DELETE FROM person WHERE handle = %s
+2025-08-04 20:28:28 - .PostgreSQLEnhanced - DEBUG - execute:339 - Args: ['ff49d4697f231e10bac102850f2']
+2025-08-04 20:28:28 - .Db - DEBUG - add:201 - added to trans: 0 2 ff49d4697f231e10bac102850f2
+2025-08-04 20:28:28 - .Db - DEBUG - transaction_commit:324 -     DBAPI 0x7fe4120774d0 transaction commit for 'Delete test person'
+2025-08-04 20:28:28 - .Db - DEBUG - __exit__:92 -     **** DbTxn 0x7fe4120fb530 exited. Called from file /home/greg/gramps-postgresql-enhanced/test_postgresql_enhanced.py, line 228, in test_person_crud **** 0.00 seconds
+2025-08-04 20:28:28 - .PostgreSQLEnhanced - DEBUG - execute:337 - SQL: SELECT json_data FROM person WHERE handle = %s
+2025-08-04 20:28:28 - .PostgreSQLEnhanced - DEBUG - execute:339 - Args: ['ff49d4697f231e10bac102850f2']
+2025-08-04 20:28:28 - root - ERROR - main:197 - ❌ Some tests failed!
+2025-08-04 20:28:28 - root - INFO - main:199 - Full test log: /home/greg/gramps-postgresql-enhanced/test_logs/test_run_20250804_202828.log
