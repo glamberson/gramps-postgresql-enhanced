@@ -1,0 +1,46 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# Testing
+.coverage
+htmlcov/
+.tox/
+.pytest_cache/
+*.cover
+.hypothesis/
+
+# Translations
+*.mo
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Gramps specific
+*.gramps
+*.gpkg
+*.grdb
+
+# PostgreSQL
+*.sql.bak
+pg_dump_*
+
+# Local development
+.env
+local_settings.py
+test_db_config.py

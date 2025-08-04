@@ -1,0 +1,512 @@
+#
+# Gramps - a GTK+/GNOME based genealogy program
+#
+# Copyright (C) 2025       Greg Lamberson
+#
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 2 of the License, or
+# (at your option) any later version.
+#
+
+"""
+PostgreSQL Enhanced connection handling for Gramps
+
+Provides advanced connection management including:
+- Multiple connection string formats
+- Connection pooling support
+- SSL/TLS configuration
+- Query translation and optimization
+"""
+
+# -------------------------------------------------------------------------
+#
+# Standard python modules
+#
+# -------------------------------------------------------------------------
+import logging
+import os
+import re
+from urllib.parse import urlparse, parse_qs
+from contextlib import contextmanager
+
+# -------------------------------------------------------------------------
+#
+# PostgreSQL modules
+#
+# -------------------------------------------------------------------------
+import psycopg
+from psycopg.types.json import Jsonb
+from psycopg import sql
+from psycopg.rows import dict_row
+
+# -------------------------------------------------------------------------
+#
+# Gramps modules
+#
+# -------------------------------------------------------------------------
+from gramps.gen.const import GRAMPS_LOCALE as glocale
+from gramps.gen.db.dbconst import ARRAYSIZE
+
+# -------------------------------------------------------------------------
+#
+# PostgreSQLConnection class
+#
+# -------------------------------------------------------------------------
+class PostgreSQLConnection:
+    """
+    PostgreSQL Enhanced connection wrapper that provides:
+    - Advanced connection management
+    - Query translation for SQLite compatibility
+    - Performance optimizations
+    - Connection pooling support
+    """
+    
+    def __init__(self, connection_info, username=None, password=None):
+        """
+        Create a new PostgreSQL Enhanced connection.
+        
+        Handles various connection string formats:
+        - postgresql://user:pass@host:port/dbname?sslmode=require
+        - postgres://...  (alias)
+        - host:port:dbname:schema
+        - dbname (local connection)
+        
+        Environment variables are also supported:
+        - PGHOST, PGPORT, PGUSER, PGPASSWORD, PGDATABASE
+        """
+        self.log = logging.getLogger(".PostgreSQLEnhanced")
+        self._pool = None
+        self._connection = None
+        self._savepoints = []
+        
+        # Parse connection string
+        conninfo, options = self._parse_connection_string(
+            connection_info, username, password)
+        
+        # Handle connection pooling if requested
+        pool_size = options.get('pool_size', 0)
+        if pool_size > 1:
+            self._create_pool(conninfo, pool_size)
+        else:
+            self._create_connection(conninfo)
+        
+        # Set up the connection
+        self._setup_connection()
+        
+        # Track prepared statements
+        self._prepared_statements = {}
+        
+        # Setup collation support
+        self._collations = []
+        self.check_collation(glocale)
+    
+    def _parse_connection_string(self, connection_info, username, password):
+        """
+        Parse various connection string formats.
+        
+        Returns: (conninfo, options) tuple
+        """
+        options = {}
+        
+        if connection_info.startswith(("postgresql://", "postgres://")):
+            # URL format - parse options from query string
+            parsed = urlparse(connection_info)
+            if parsed.query:
+                options = {k: v[0] for k, v in parse_qs(parsed.query).items()}
+                # Remove options from connection string
+                base_url = connection_info.split('?')[0]
+                conninfo = base_url
+            else:
+                conninfo = connection_info
+                
+        elif ":" in connection_info and connection_info.count(":") >= 2:
+            # Traditional format: host:port:dbname[:schema]
+            parts = connection_info.split(":")
+            host = parts[0] or "localhost"
+            port = parts[1] or "5432"
+            dbname = parts[2]
+            
+            conninfo = f"host={host} port={port} dbname={dbname}"
+            if username:
+                conninfo += f" user={username}"
+            if password:
+                conninfo += f" password={password}"
+            
+            # Handle schema if provided
+            if len(parts) > 3:
+                options['schema'] = parts[3]
+            else:
+                options['schema'] = 'public'
+                
+        else:
+            # Simple database name or key=value format
+            if '=' in connection_info:
+                # Already in key=value format
+                conninfo = connection_info
+            else:
+                # Just a database name
+                conninfo = f"dbname={connection_info}"
+                
+            if username:
+                conninfo += f" user={username}"
+            if password:
+                conninfo += f" password={password}"
+            options['schema'] = 'public'
+        
+        # Add any environment variables not already in conninfo
+        self._add_environment_variables(conninfo)
+        
+        return conninfo, options
+    
+    def _add_environment_variables(self, conninfo):
+        """Add PostgreSQL environment variables to connection string."""
+        env_mapping = {
+            'PGHOST': 'host',
+            'PGPORT': 'port',
+            'PGUSER': 'user',
+            'PGPASSWORD': 'password',
+            'PGDATABASE': 'dbname',
+            'PGSSLMODE': 'sslmode',
+        }
+        
+        for env_var, param in env_mapping.items():
+            if env_var in os.environ and param not in conninfo:
+                conninfo += f" {param}={os.environ[env_var]}"
+        
+        return conninfo
+    
+    def _create_connection(self, conninfo):
+        """Create a single database connection."""
+        self._connection = psycopg.connect(conninfo)
+        self._connection.autocommit = False
+    
+    def _create_pool(self, conninfo, pool_size):
+        """Create a connection pool."""
+        # Note: psycopg3 has built-in pool support
+        from psycopg_pool import ConnectionPool
+        
+        self._pool = ConnectionPool(
+            conninfo,
+            min_size=1,
+            max_size=pool_size,
+            timeout=30.0,
+        )
+        self.log.info(f"Created connection pool with size {pool_size}")
+    
+    def _setup_connection(self):
+        """Set up the connection with required functions and settings."""
+        with self._get_cursor() as cur:
+            # Create REGEXP function for SQLite compatibility
+            cur.execute("""
+                CREATE OR REPLACE FUNCTION regexp(pattern text, string text)
+                RETURNS boolean AS $$
+                BEGIN
+                    RETURN string ~ pattern;
+                END;
+                $$ LANGUAGE plpgsql IMMUTABLE PARALLEL SAFE;
+            """)
+            
+            # Create case-insensitive regexp function
+            cur.execute("""
+                CREATE OR REPLACE FUNCTION regexpi(pattern text, string text)
+                RETURNS boolean AS $$
+                BEGIN
+                    RETURN string ~* pattern;
+                END;
+                $$ LANGUAGE plpgsql IMMUTABLE PARALLEL SAFE;
+            """)
+            
+            # Set search_path if schema was specified
+            if hasattr(self, 'schema') and self.schema != 'public':
+                cur.execute(
+                    sql.SQL("SET search_path TO {}, public").format(
+                        sql.Identifier(self.schema)
+                    )
+                )
+            
+            self._commit()
+    
+    @contextmanager
+    def _get_cursor(self, row_factory=None):
+        """Get a cursor from connection or pool."""
+        if self._pool:
+            with self._pool.connection() as conn:
+                with conn.cursor(row_factory=row_factory) as cur:
+                    yield cur
+        else:
+            with self._connection.cursor(row_factory=row_factory) as cur:
+                yield cur
+    
+    def check_collation(self, locale):
+        """
+        Check and setup collation for locale.
+        PostgreSQL has built-in collation support.
+        """
+        collation = locale.get_collation()
+        
+        # PostgreSQL uses different collation names than Gramps
+        # Map common Gramps collations to PostgreSQL
+        collation_map = {
+            'en_US.UTF-8': 'en_US.utf8',
+            'en_GB.UTF-8': 'en_GB.utf8',
+            'de_DE.UTF-8': 'de_DE.utf8',
+            'fr_FR.UTF-8': 'fr_FR.utf8',
+        }
+        
+        pg_collation = collation_map.get(collation, collation)
+        
+        # Check if collation exists
+        with self._get_cursor() as cur:
+            cur.execute("""
+                SELECT COUNT(*) 
+                FROM pg_collation 
+                WHERE collname = %s
+            """, [pg_collation])
+            
+            if cur.fetchone()[0] == 0:
+                self.log.warning(
+                    f"Collation {pg_collation} not found, using default")
+                pg_collation = "default"
+                
+        if pg_collation not in self._collations:
+            self._collations.append(pg_collation)
+            
+        return pg_collation
+    
+    def execute(self, query, args=None):
+        """
+        Execute an SQL statement.
+        
+        Provides SQLite compatibility by:
+        - Converting ? placeholders to %s
+        - Translating SQLite-specific syntax
+        - Optimizing common queries
+        """
+        # Translate query for PostgreSQL
+        pg_query = self._translate_query(query)
+        
+        self.log.debug(f"SQL: {pg_query}")
+        if args:
+            self.log.debug(f"Args: {args}")
+        
+        # Execute query
+        with self._get_cursor() as cur:
+            if args:
+                cur.execute(pg_query, args)
+            else:
+                cur.execute(pg_query)
+            
+            # Store cursor for fetch operations
+            self._last_cursor = cur
+            
+            # For SELECT, return cursor for compatibility
+            if pg_query.strip().upper().startswith('SELECT'):
+                return cur
+    
+    def _translate_query(self, query):
+        """
+        Translate SQLite query to PostgreSQL.
+        
+        More sophisticated than the basic addon's approach.
+        """
+        # Convert ? placeholders to %s
+        if '?' in query:
+            query = query.replace('?', '%s')
+        
+        # Handle REGEXP operator
+        query = re.sub(r'\bREGEXP\b', '~', query, flags=re.IGNORECASE)
+        
+        # Handle LIMIT syntax
+        # SQLite: LIMIT offset, count
+        # PostgreSQL: LIMIT count OFFSET offset
+        limit_match = re.search(r'LIMIT\s+(\d+)\s*,\s*(-?\d+)', query, re.IGNORECASE)
+        if limit_match:
+            offset, count = limit_match.groups()
+            if count == '-1':
+                count = 'ALL'
+            query = re.sub(
+                r'LIMIT\s+\d+\s*,\s*-?\d+',
+                f'LIMIT {count} OFFSET {offset}',
+                query,
+                flags=re.IGNORECASE
+            )
+        
+        # Handle LIMIT -1 (SQLite for no limit)
+        query = re.sub(r'LIMIT\s+-1\b', 'LIMIT ALL', query, flags=re.IGNORECASE)
+        
+        # Handle SQLite type names
+        query = query.replace('BLOB', 'BYTEA')
+        query = query.replace('INTEGER PRIMARY KEY', 'SERIAL PRIMARY KEY')
+        
+        # Handle DESC as column name (PostgreSQL reserved word)
+        # This is more targeted than the basic addon
+        if re.search(r'\b(desc)\b(?!\s+(ASC|DESC|LIMIT))', query, re.IGNORECASE):
+            query = re.sub(r'\b(desc)\b', 'desc_', query, flags=re.IGNORECASE)
+        
+        return query
+    
+    def fetchone(self):
+        """Fetch one row from the last query."""
+        if hasattr(self, '_last_cursor') and self._last_cursor:
+            return self._last_cursor.fetchone()
+        return None
+    
+    def fetchall(self):
+        """Fetch all rows from the last query."""
+        if hasattr(self, '_last_cursor') and self._last_cursor:
+            return self._last_cursor.fetchall()
+        return []
+    
+    def fetchmany(self, size=ARRAYSIZE):
+        """Fetch many rows from the last query."""
+        if hasattr(self, '_last_cursor') and self._last_cursor:
+            return self._last_cursor.fetchmany(size)
+        return []
+    
+    def commit(self):
+        """Commit the current transaction."""
+        if self._pool:
+            # Pool handles transactions per connection
+            pass
+        else:
+            self._connection.commit()
+    
+    def _commit(self):
+        """Internal commit method."""
+        if self._connection:
+            self._connection.commit()
+    
+    def rollback(self):
+        """Rollback the current transaction."""
+        if self._pool:
+            # Pool handles transactions per connection
+            pass
+        else:
+            self._connection.rollback()
+        self._savepoints.clear()
+    
+    def begin(self):
+        """
+        Begin a transaction.
+        
+        PostgreSQL starts transactions automatically, but we
+        track this for savepoint support.
+        """
+        # Create a savepoint for nested transaction support
+        savepoint_name = f"sp_{len(self._savepoints)}"
+        self.execute(f"SAVEPOINT {savepoint_name}")
+        self._savepoints.append(savepoint_name)
+    
+    def begin_savepoint(self, name=None):
+        """Create a named savepoint."""
+        if not name:
+            name = f"sp_{len(self._savepoints)}"
+        self.execute(f"SAVEPOINT {name}")
+        self._savepoints.append(name)
+        return name
+    
+    def rollback_savepoint(self, name):
+        """Rollback to a specific savepoint."""
+        if name in self._savepoints:
+            self.execute(f"ROLLBACK TO SAVEPOINT {name}")
+            # Remove this and all later savepoints
+            idx = self._savepoints.index(name)
+            self._savepoints = self._savepoints[:idx]
+    
+    def close(self):
+        """Close the database connection."""
+        if self._pool:
+            self._pool.close()
+        elif self._connection:
+            self._connection.close()
+    
+    def cursor(self):
+        """Return a new cursor object."""
+        if self._pool:
+            # Return a context manager for pool
+            return self._pool.connection().cursor()
+        else:
+            return self._connection.cursor()
+    
+    def table_exists(self, table_name):
+        """Check if a table exists."""
+        with self._get_cursor() as cur:
+            cur.execute("""
+                SELECT EXISTS (
+                    SELECT FROM information_schema.tables 
+                    WHERE table_schema = 'public' 
+                    AND table_name = %s
+                )
+            """, [table_name])
+            return cur.fetchone()[0]
+    
+    def column_exists(self, table_name, column_name):
+        """Check if a column exists in a table."""
+        with self._get_cursor() as cur:
+            cur.execute("""
+                SELECT EXISTS (
+                    SELECT FROM information_schema.columns
+                    WHERE table_schema = 'public'
+                    AND table_name = %s
+                    AND column_name = %s
+                )
+            """, [table_name, column_name])
+            return cur.fetchone()[0]
+    
+    def index_exists(self, index_name):
+        """Check if an index exists."""
+        with self._get_cursor() as cur:
+            cur.execute("""
+                SELECT EXISTS (
+                    SELECT FROM pg_indexes
+                    WHERE schemaname = 'public'
+                    AND indexname = %s
+                )
+            """, [index_name])
+            return cur.fetchone()[0]
+    
+    def drop_column(self, table_name, column_name):
+        """
+        Drop a column from a table.
+        
+        PostgreSQL has supported this for a long time,
+        unlike SQLite which added it recently.
+        """
+        self.execute(
+            sql.SQL("ALTER TABLE {} DROP COLUMN {}").format(
+                sql.Identifier(table_name),
+                sql.Identifier(column_name)
+            )
+        )
+    
+    def get_server_info(self):
+        """Get PostgreSQL server information."""
+        info = {}
+        with self._get_cursor() as cur:
+            # Version
+            cur.execute("SELECT version()")
+            info['version'] = cur.fetchone()[0]
+            
+            # Current database
+            cur.execute("SELECT current_database()")
+            info['database'] = cur.fetchone()[0]
+            
+            # Current user
+            cur.execute("SELECT current_user")
+            info['user'] = cur.fetchone()[0]
+            
+            # Server encoding
+            cur.execute("SHOW server_encoding")
+            info['encoding'] = cur.fetchone()[0]
+            
+        return info
+    
+    def __getattr__(self, name):
+        """
+        Delegate any missing methods to the connection object.
+        This ensures compatibility with any DBAPI methods we missed.
+        """
+        if self._connection:
+            return getattr(self._connection, name)
+        raise AttributeError(f"'{self.__class__.__name__}' object has no attribute '{name}'")

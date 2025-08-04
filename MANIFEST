@@ -1,0 +1,5 @@
+README.md
+requirements.txt
+test/*.py
+po/*.po
+po/*.pot
