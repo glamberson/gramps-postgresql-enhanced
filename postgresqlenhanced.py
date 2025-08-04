@@ -340,10 +340,10 @@ class PostgreSQLEnhanced(DBAPI):
         """Load connection configuration from connection_info.txt."""
         config_path = os.path.join(directory, 'connection_info.txt')
         config = {
-            'host': '192.168.10.90',
+            'host': 'localhost',
             'port': '5432', 
-            'user': 'genealogy_user',
-            'password': 'GenealogyData2025',
+            'user': 'gramps_user',
+            'password': 'gramps',
             'database_mode': 'separate',
             'shared_database_name': 'gramps_shared'
         }

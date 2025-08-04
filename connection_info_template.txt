@@ -1,20 +1,28 @@
 # PostgreSQL Enhanced Connection Configuration
-# Copy this file to connection_info.txt in your database directory
+# This file is automatically created when you create a new family tree.
+# Edit the values below to match your PostgreSQL setup.
 
 # Connection details
-host = 192.168.10.90
+host = localhost
 port = 5432
-user = genealogy_user
-password = GenealogyData2025
+user = gramps_user
+password = CHANGE_ME
 
 # Database mode: 'separate' or 'shared'
-# separate = Each family tree gets its own PostgreSQL database (requires CREATEDB privilege)
+# separate = Each family tree gets its own PostgreSQL database (recommended)
+#            Requires user to have CREATEDB privilege
 # shared = All family trees in one database with table prefixes
+#          Use this if your database user lacks CREATEDB privilege
 database_mode = separate
 
-# For shared mode, specify the shared database name
+# For shared mode only: the name of the shared database
+# (ignored in separate mode)
 shared_database_name = gramps_shared
 
-# Optional settings
-# pool_size = 10
-# sslmode = prefer
+# Optional advanced settings
+# pool_size = 10              # Connection pool size
+# sslmode = prefer            # SSL connection mode (disable, allow, prefer, require)
+# connect_timeout = 10        # Connection timeout in seconds
+
+# Note: After editing this file, close and reopen the family tree in Gramps
+# for the changes to take effect.
