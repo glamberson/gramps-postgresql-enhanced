@@ -39,7 +39,7 @@ register(DATABASE,
     authors_email=["greg@aigenealogyinsights.com"],
     maintainers=["Greg Lamberson"],
     maintainers_email=["greg@aigenealogyinsights.com"],
-    requires_mod={"psycopg": "3.1"},  # psycopg3 requirement
+    requires_mod=[],  # psycopg3 requirement handled separately
     requires_exe=[],                   # No external executables required
     depends_on=[],                     # No dependencies on other Gramps plugins
     help_url="https://github.com/gramps-project/addons-source/wiki/PostgreSQLEnhanced"
