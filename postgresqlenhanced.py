@@ -296,9 +296,15 @@ class PostgreSQLEnhanced(DBAPI):
         # Call our initialize method
         self._initialize(directory, actual_username, actual_password)
         
-        # Call parent's load to set up undo manager and other base functionality
-        # Pass the directory and callback to satisfy the parent's requirements
-        super().load(directory, callback, mode or "w")
+        # Set up the undo manager without calling parent's full load
+        # which tries to run upgrades on non-existent files
+        from gramps.gen.db.generic import DbGenericUndo
+        self.undolog = None
+        self.undodb = DbGenericUndo(self, self.undolog)
+        self.undodb.open()
+        
+        # Set proper version to avoid upgrade prompts
+        self._set_metadata("version", "21")
     
     def _parse_connection_options(self, connection_string):
         """Parse connection options from the connection string."""
