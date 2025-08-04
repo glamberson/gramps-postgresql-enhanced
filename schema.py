@@ -348,7 +348,9 @@ class PostgreSQLSchema:
         # Build the SET clause for the trigger
         set_clauses = []
         for col_name, json_path in REQUIRED_COLUMNS[obj_type].items():
-            set_clauses.append(f"NEW.{col_name} = {json_path}")
+            # Replace json_data with NEW.json_data in the path
+            trigger_path = json_path.replace('json_data', 'NEW.json_data')
+            set_clauses.append(f"NEW.{col_name} = {trigger_path}")
         
         set_sql = ";\n        ".join(set_clauses)
         
