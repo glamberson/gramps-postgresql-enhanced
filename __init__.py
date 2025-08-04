@@ -28,7 +28,17 @@
 # Local modules
 #
 #-------------------------------------------------------------------------
-from .postgresqlenhanced import PostgreSQLEnhanced
+# Fix relative import for Gramps plugin loading
+try:
+    from .postgresqlenhanced import PostgreSQLEnhanced
+except ImportError:
+    # When loaded as a Gramps plugin, relative imports don't work
+    import sys
+    import os
+    plugin_dir = os.path.dirname(__file__)
+    if plugin_dir not in sys.path:
+        sys.path.insert(0, plugin_dir)
+    from postgresqlenhanced import PostgreSQLEnhanced
 
 __all__ = ['PostgreSQLEnhanced']
 

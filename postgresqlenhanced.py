@@ -75,11 +75,17 @@ except ValueError:
     _trans = glocale.translation
 _ = _trans.gettext
 
-# Import local modules
-from .connection import PostgreSQLConnection
-from .schema import PostgreSQLSchema
-from .migration import MigrationManager
-from .queries import EnhancedQueries
+# Import local modules - use absolute imports for Gramps plugins
+import sys
+import os
+plugin_dir = os.path.dirname(__file__)
+if plugin_dir not in sys.path:
+    sys.path.insert(0, plugin_dir)
+
+from connection import PostgreSQLConnection
+from schema import PostgreSQLSchema
+from migration import MigrationManager
+from queries import EnhancedQueries
 
 # -------------------------------------------------------------------------
 #
@@ -88,6 +94,9 @@ from .queries import EnhancedQueries
 # -------------------------------------------------------------------------
 MIN_PSYCOPG_VERSION = (3, 1)
 MIN_POSTGRESQL_VERSION = 15
+
+# Create logger
+LOG = logging.getLogger(".PostgreSQLEnhanced")
 
 # -------------------------------------------------------------------------
 #
@@ -201,7 +210,7 @@ class PostgreSQLEnhanced(DBAPI):
                             }
                 
             except Exception as e:
-                self._log.debug(f"Error getting database info: {e}")
+                LOG.debug(f"Error getting database info: {e}")
         
         return summary
     
@@ -218,17 +227,27 @@ class PostgreSQLEnhanced(DBAPI):
         - ?use_jsonb=false  (disable JSONB, use blob only)
         - ?pool_size=10     (connection pool size)
         """
+        # Check if this is a Gramps file-based path (like /home/user/.local/share/gramps/grampsdb/xxx)
+        # If so, use our hardcoded connection for now
+        if directory and os.path.isabs(directory) and '/grampsdb/' in directory:
+            # This is a Gramps-generated path, use our PostgreSQL connection
+            # TODO: Read connection settings from a config file or environment
+            connection_string = "postgresql://genealogy_user:GenealogyData2025@192.168.10.90:5432/gramps_test_db"
+            LOG.info(f"Using PostgreSQL connection instead of file path: {directory}")
+        else:
+            connection_string = directory
+        
         # Parse connection options
-        self._parse_connection_options(directory)
+        self._parse_connection_options(connection_string)
         
         # Store path for compatibility
         self.path = directory
         
         # Create connection
         try:
-            self.dbapi = PostgreSQLConnection(directory, username, password)
+            self.dbapi = PostgreSQLConnection(connection_string, username, password)
         except Exception as e:
-            raise DbConnectionError(str(e), directory)
+            raise DbConnectionError(str(e), connection_string)
         
         # Set serializer based on configuration
         if self._use_jsonb:
@@ -249,7 +268,36 @@ class PostgreSQLEnhanced(DBAPI):
             self.enhanced_queries = EnhancedQueries(self.dbapi)
         
         # Log successful initialization
-        self._log.info("PostgreSQL Enhanced initialized successfully")
+        LOG.info("PostgreSQL Enhanced initialized successfully")
+        
+        # Set database as writable
+        self.readonly = False
+        self._is_open = True
+    
+    def is_open(self):
+        """Return True if the database is open."""
+        return getattr(self, '_is_open', False)
+    
+    def open(self, value=None):
+        """Open database - compatibility method for Gramps."""
+        # Database is already open from load()
+        return True
+    
+    def load(self, directory, callback=None, mode=None, force_schema_upgrade=False, 
+             force_bsddb_upgrade=False, force_bsddb_downgrade=False, 
+             force_python_upgrade=False, user=None, password=None, 
+             username=None, *args, **kwargs):
+        """
+        Load database - Gramps compatibility method.
+        
+        Gramps calls this with various parameters, we only need directory, username, and password.
+        """
+        # Handle both 'user' and 'username' parameters
+        actual_username = username or user or None
+        actual_password = password or None
+        
+        # Call our initialize method
+        self._initialize(directory, actual_username, actual_password)
     
     def _parse_connection_options(self, connection_string):
         """Parse connection options from the connection string."""
@@ -261,11 +309,12 @@ class PostgreSQLEnhanced(DBAPI):
                 if 'use_jsonb' in params:
                     self._use_jsonb = params['use_jsonb'][0].lower() != 'false'
     
-    def close(self):
+    def close(self, *args, **kwargs):
         """Close the database connection."""
         if hasattr(self, 'dbapi') and self.dbapi:
             self.dbapi.close()
-        super().close()
+        self._is_open = False
+        # Don't call super().close() as it expects file operations
     
     # Migration methods
     def has_migration_available(self):

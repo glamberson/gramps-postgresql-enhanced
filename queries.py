@@ -413,7 +413,7 @@ class EnhancedQueries:
                 SUBSTRING(json_data->'birth_ref_index'->>'date', 1, 2) || '00' as century,
                 COUNT(*) as count
             FROM person
-            WHERE json_data->'birth_ref_index'->>'date' ~ '^\d{4}'
+            WHERE json_data->'birth_ref_index'->>'date' ~ '^\\d{4}'
             GROUP BY century
             ORDER BY century
         """)

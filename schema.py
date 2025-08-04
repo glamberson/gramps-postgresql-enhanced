@@ -26,8 +26,17 @@ Handles:
 # -------------------------------------------------------------------------
 import logging
 import pickle
+import sys
+import os
 from psycopg.types.json import Jsonb
 from psycopg import sql
+
+# Add plugin directory to path for imports
+plugin_dir = os.path.dirname(__file__)
+if plugin_dir not in sys.path:
+    sys.path.insert(0, plugin_dir)
+
+from schema_columns import REQUIRED_COLUMNS, REQUIRED_INDEXES
 
 # -------------------------------------------------------------------------
 #
@@ -194,6 +203,20 @@ class PostgreSQLSchema:
     def _create_object_table(self, obj_type):
         """Create a table for a specific object type."""
         if self.use_jsonb:
+            # Build column definitions for required columns
+            generated_columns = []
+            if obj_type in REQUIRED_COLUMNS:
+                for col_name, json_path in REQUIRED_COLUMNS[obj_type].items():
+                    if col_name != 'gramps_id':  # gramps_id is already included
+                        generated_columns.append(
+                            f"{col_name} VARCHAR(255) GENERATED ALWAYS AS ({json_path}) STORED"
+                        )
+            
+            # Join all column definitions
+            extra_columns = ',\n                    '.join(generated_columns)
+            if extra_columns:
+                extra_columns = ',\n                    ' + extra_columns
+            
             # Enhanced table with JSONB
             self.conn.execute(f"""
                 CREATE TABLE IF NOT EXISTS {obj_type} (
@@ -203,7 +226,7 @@ class PostgreSQLSchema:
                     -- Generated columns for common queries
                     gramps_id VARCHAR(50) GENERATED ALWAYS AS 
                         (json_data->>'gramps_id') STORED,
-                    change_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                    change_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP{extra_columns}
                 )
             """)
             
@@ -233,6 +256,16 @@ class PostgreSQLSchema:
     def _create_object_specific_indexes(self, obj_type):
         """Create indexes specific to each object type."""
         
+        # First, create all required indexes from DBAPI
+        if obj_type in REQUIRED_INDEXES:
+            for column in REQUIRED_INDEXES[obj_type]:
+                if column != 'gramps_id':  # gramps_id index already created
+                    self.conn.execute(f"""
+                        CREATE INDEX IF NOT EXISTS idx_{obj_type}_{column} 
+                        ON {obj_type} ({column})
+                    """)
+        
+        # Then add our enhanced indexes for better performance
         if obj_type == 'person':
             # Name searches
             self.conn.execute(f"""

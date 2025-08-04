@@ -290,19 +290,32 @@ class PostgreSQLConnection:
         if args:
             self.log.debug(f"Args: {args}")
         
+        # Get a persistent cursor for DBAPI compatibility
+        if not hasattr(self, '_persistent_cursor') or self._persistent_cursor.closed:
+            if self._pool:
+                # For pools, get a connection from the pool
+                self._persistent_conn = self._pool.getconn()
+                self._persistent_cursor = self._persistent_conn.cursor()
+            else:
+                self._persistent_cursor = self._connection.cursor()
+        
         # Execute query
-        with self._get_cursor() as cur:
+        cur = self._persistent_cursor
+        try:
             if args:
                 cur.execute(pg_query, args)
             else:
                 cur.execute(pg_query)
-            
-            # Store cursor for fetch operations
-            self._last_cursor = cur
-            
-            # For SELECT, return cursor for compatibility
-            if pg_query.strip().upper().startswith('SELECT'):
-                return cur
+        except Exception as e:
+            # Rollback on error to prevent "current transaction is aborted" errors
+            self.rollback()
+            raise e
+        
+        # Store cursor reference for compatibility
+        self._last_cursor = cur
+        
+        # Return the cursor (stays open for fetch operations)
+        return cur
     
     def _translate_query(self, query):
         """
@@ -422,12 +435,16 @@ class PostgreSQLConnection:
             self._connection.close()
     
     def cursor(self):
-        """Return a new cursor object."""
-        if self._pool:
-            # Return a context manager for pool
-            return self._pool.connection().cursor()
-        else:
-            return self._connection.cursor()
+        """Return a cursor object."""
+        # Return the persistent cursor to maintain compatibility
+        if not hasattr(self, '_persistent_cursor') or self._persistent_cursor.closed:
+            if self._pool:
+                # For pools, get a connection from the pool
+                self._persistent_conn = self._pool.getconn()
+                self._persistent_cursor = self._persistent_conn.cursor()
+            else:
+                self._persistent_cursor = self._connection.cursor()
+        return self._persistent_cursor
     
     def table_exists(self, table_name):
         """Check if a table exists."""

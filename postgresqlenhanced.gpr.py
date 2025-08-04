@@ -32,13 +32,13 @@ register(DATABASE,
     version = '1.0.1',
     gramps_target_version="6.0",
     status=STABLE,
-    audience=DEVELOPER,  # Start with DEVELOPER, move to EXPERT after testing
+    audience=EVERYONE,  # Available to all users
     fname="postgresqlenhanced.py",
     databaseclass="PostgreSQLEnhanced",
     authors=["Greg Lamberson"],
-    authors_email=["greg@aigenealogyinsights.com"],
+    authors_email=["lamberson@yahoo.com"],
     maintainers=["Greg Lamberson"],
-    maintainers_email=["greg@aigenealogyinsights.com"],
+    maintainers_email=["lamberson@yahoo.com"],
     requires_mod=[],  # psycopg3 requirement handled separately
     requires_exe=[],                   # No external executables required
     depends_on=[],                     # No dependencies on other Gramps plugins
