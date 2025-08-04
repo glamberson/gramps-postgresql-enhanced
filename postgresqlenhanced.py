@@ -228,14 +228,43 @@ class PostgreSQLEnhanced(DBAPI):
         - ?pool_size=10     (connection pool size)
         """
         # Check if this is a Gramps file-based path (like /home/user/.local/share/gramps/grampsdb/xxx)
-        # If so, use our hardcoded connection for now
         if directory and os.path.isabs(directory) and '/grampsdb/' in directory:
-            # This is a Gramps-generated path, use our PostgreSQL connection
-            # TODO: Read connection settings from a config file or environment
-            connection_string = "postgresql://genealogy_user:GenealogyData2025@192.168.10.90:5432/gramps_test_db"
-            LOG.info(f"Using PostgreSQL connection instead of file path: {directory}")
+            # Extract tree name from path
+            path_parts = directory.rstrip('/').split('/')
+            tree_name = path_parts[-1] if path_parts else 'gramps_default'
+            
+            # Store directory for config file lookup
+            self.directory = directory
+            
+            # Load connection configuration
+            config = self._load_connection_config(directory)
+            
+            if config['database_mode'] == 'separate':
+                # Separate database per tree
+                db_name = tree_name
+                self.table_prefix = ""
+                self.shared_db_mode = False
+                
+                # Try to create database if it doesn't exist
+                if config.get('user') and config.get('password'):
+                    self._ensure_database_exists(db_name, config)
+            else:
+                # Shared database with table prefixes
+                db_name = config.get('shared_database_name', 'gramps_shared')
+                # Sanitize tree name for use as table prefix
+                self.table_prefix = re.sub(r'[^a-zA-Z0-9_]', '_', tree_name) + "_"
+                self.shared_db_mode = True
+                LOG.info(f"Using shared database mode with prefix: {self.table_prefix}")
+            
+            # Build connection string
+            connection_string = f"postgresql://{config['user']}:{config['password']}@{config['host']}:{config['port']}/{db_name}"
+            
+            LOG.info(f"Tree name: '{tree_name}', Database: '{db_name}', Mode: '{config['database_mode']}'")
         else:
+            # Direct connection string
             connection_string = directory
+            self.table_prefix = ""
+            self.shared_db_mode = False
         
         # Parse connection options
         self._parse_connection_options(connection_string)
@@ -253,8 +282,9 @@ class PostgreSQLEnhanced(DBAPI):
         # JSONSerializer has object_to_data method that DBAPI needs
         self.serializer = JSONSerializer()
         
-        # Initialize schema
-        schema = PostgreSQLSchema(self.dbapi, use_jsonb=self._use_jsonb)
+        # Initialize schema with table prefix if in shared mode
+        schema = PostgreSQLSchema(self.dbapi, use_jsonb=self._use_jsonb, 
+                                table_prefix=getattr(self, 'table_prefix', ''))
         schema.check_and_init_schema()
         
         # Initialize migration manager
@@ -305,6 +335,76 @@ class PostgreSQLEnhanced(DBAPI):
         
         # Set proper version to avoid upgrade prompts
         self._set_metadata("version", "21")
+    
+    def _load_connection_config(self, directory):
+        """Load connection configuration from connection_info.txt."""
+        config_path = os.path.join(directory, 'connection_info.txt')
+        config = {
+            'host': '192.168.10.90',
+            'port': '5432', 
+            'user': 'genealogy_user',
+            'password': 'GenealogyData2025',
+            'database_mode': 'separate',
+            'shared_database_name': 'gramps_shared'
+        }
+        
+        if os.path.exists(config_path):
+            LOG.info(f"Loading connection config from: {config_path}")
+            with open(config_path, 'r') as f:
+                for line in f:
+                    line = line.strip()
+                    if line and not line.startswith('#') and '=' in line:
+                        key, value = line.split('=', 1)
+                        config[key.strip()] = value.strip()
+        else:
+            LOG.warning(f"No connection_info.txt found at {config_path}, using defaults")
+            # Try to create template for user
+            template_path = os.path.join(os.path.dirname(__file__), 'connection_info_template.txt')
+            if os.path.exists(template_path):
+                try:
+                    import shutil
+                    shutil.copy(template_path, config_path)
+                    LOG.info(f"Created connection_info.txt template at {config_path}")
+                except Exception as e:
+                    LOG.debug(f"Could not create config template: {e}")
+        
+        return config
+    
+    def _ensure_database_exists(self, db_name, config):
+        """Create PostgreSQL database if it doesn't exist (for separate database mode)."""
+        try:
+            # Connect to 'postgres' database to check/create the target database
+            temp_conn_string = f"postgresql://{config['user']}:{config['password']}@{config['host']}:{config['port']}/postgres"
+            temp_conn = psycopg.connect(temp_conn_string)
+            temp_conn.autocommit = True
+            
+            with temp_conn.cursor() as cur:
+                # Check if database exists
+                cur.execute(
+                    "SELECT 1 FROM pg_database WHERE datname = %s",
+                    [db_name]
+                )
+                if not cur.fetchone():
+                    # Create database using template with extensions
+                    LOG.info(f"Creating new PostgreSQL database: {db_name}")
+                    cur.execute(
+                        sql.SQL("CREATE DATABASE {} TEMPLATE template_gramps").format(
+                            sql.Identifier(db_name)
+                        )
+                    )
+                    LOG.info(f"Successfully created database: {db_name}")
+                else:
+                    LOG.info(f"Database already exists: {db_name}")
+            
+            temp_conn.close()
+            
+        except psycopg.errors.InsufficientPrivilege:
+            LOG.error(f"User '{config['user']}' lacks CREATE DATABASE privilege. "
+                     f"Please create database '{db_name}' manually or grant CREATEDB privilege.")
+            raise
+        except Exception as e:
+            LOG.error(f"Error checking/creating database: {e}")
+            raise
     
     def _parse_connection_options(self, connection_string):
         """Parse connection options from the connection string."""

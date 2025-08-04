@@ -232,8 +232,7 @@ class PostgreSQLConnection:
     
     def _setup_jsonb_handling(self):
         """Configure JSONB to return as JSON strings for Gramps compatibility."""
-        # No-op for now - let psycopg3 handle JSONB normally
-        # The issue might be elsewhere
+        # We handle JSONB conversion in fetchone/fetchall/fetchmany instead
         pass
     
     @contextmanager
@@ -384,15 +383,8 @@ class PostgreSQLConnection:
         if '?' in query:
             query = query.replace('?', '%s')
         
-        # CRITICAL: Convert json_data selection to return as text for JSONSerializer
-        # This ensures psycopg3 doesn't parse JSONB to Python objects
-        if 'json_data FROM' in query:
-            query = re.sub(
-                r'(SELECT\s+(?:\w+\.)?)(json_data)(\s+FROM)',
-                r'\1\2::text\3',
-                query,
-                flags=re.IGNORECASE
-            )
+        # No longer needed - we handle JSONB at the psycopg3 level
+        # in _setup_jsonb_handling()
         
         # Handle REGEXP operator
         query = re.sub(r'\bREGEXP\b', '~', query, flags=re.IGNORECASE)
@@ -426,22 +418,40 @@ class PostgreSQLConnection:
         
         return query
     
+    def _convert_jsonb_in_row(self, row):
+        """Convert JSONB dicts to JSON strings in a row."""
+        if row is None:
+            return None
+        
+        import json
+        converted = []
+        for value in row:
+            if isinstance(value, (dict, list)):
+                # This is JSONB data - convert to string for Gramps
+                converted.append(json.dumps(value))
+            else:
+                converted.append(value)
+        return tuple(converted)
+    
     def fetchone(self):
         """Fetch one row from the last query."""
         if hasattr(self, '_last_cursor') and self._last_cursor:
-            return self._last_cursor.fetchone()
+            row = self._last_cursor.fetchone()
+            return self._convert_jsonb_in_row(row)
         return None
     
     def fetchall(self):
         """Fetch all rows from the last query."""
         if hasattr(self, '_last_cursor') and self._last_cursor:
-            return self._last_cursor.fetchall()
+            rows = self._last_cursor.fetchall()
+            return [self._convert_jsonb_in_row(row) for row in rows]
         return []
     
     def fetchmany(self, size=ARRAYSIZE):
         """Fetch many rows from the last query."""
         if hasattr(self, '_last_cursor') and self._last_cursor:
-            return self._last_cursor.fetchmany(size)
+            rows = self._last_cursor.fetchmany(size)
+            return [self._convert_jsonb_in_row(row) for row in rows]
         return []
     
     def commit(self):
@@ -511,7 +521,8 @@ class PostgreSQLConnection:
                 self._persistent_cursor = self._persistent_conn.cursor()
             else:
                 self._persistent_cursor = self._connection.cursor()
-        return self._persistent_cursor
+        # Wrap the cursor to handle JSONB conversion
+        return CursorWrapper(self._persistent_cursor, self)
     
     def table_exists(self, table_name):
         """Check if a table exists."""
@@ -594,3 +605,48 @@ class PostgreSQLConnection:
         if self._connection:
             return getattr(self._connection, name)
         raise AttributeError(f"'{self.__class__.__name__}' object has no attribute '{name}'")
+
+
+# -------------------------------------------------------------------------
+#
+# CursorWrapper class
+#
+# -------------------------------------------------------------------------
+class CursorWrapper:
+    """Wrapper for psycopg3 cursor that converts JSONB to strings for Gramps."""
+    
+    def __init__(self, cursor, connection):
+        self._cursor = cursor
+        self._connection = connection
+    
+    def __getattr__(self, name):
+        """Delegate all other attributes to the wrapped cursor."""
+        return getattr(self._cursor, name)
+    
+    def execute(self, query, params=None):
+        """Execute query through the wrapped cursor."""
+        return self._cursor.execute(query, params)
+    
+    def fetchone(self):
+        """Fetch one row, converting JSONB to strings."""
+        row = self._cursor.fetchone()
+        return self._connection._convert_jsonb_in_row(row)
+    
+    def fetchall(self):
+        """Fetch all rows, converting JSONB to strings."""
+        rows = self._cursor.fetchall()
+        return [self._connection._convert_jsonb_in_row(row) for row in rows]
+    
+    def fetchmany(self, size=None):
+        """Fetch many rows, converting JSONB to strings."""
+        rows = self._cursor.fetchmany(size) if size else self._cursor.fetchmany()
+        return [self._connection._convert_jsonb_in_row(row) for row in rows]
+    
+    def __enter__(self):
+        """Context manager entry."""
+        return self
+    
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        """Context manager exit."""
+        # Don't close the cursor - it's persistent
+        pass

@@ -81,16 +81,22 @@ class PostgreSQLSchema:
     - Future upgrade support
     """
     
-    def __init__(self, connection, use_jsonb=True):
+    def __init__(self, connection, use_jsonb=True, table_prefix=""):
         """
         Initialize schema manager.
         
         :param connection: PostgreSQLConnection instance
         :param use_jsonb: Whether to create JSONB columns
+        :param table_prefix: Prefix for table names (for shared database mode)
         """
         self.conn = connection
         self.use_jsonb = use_jsonb
+        self.table_prefix = table_prefix
         self.log = logging.getLogger(".PostgreSQLEnhanced.Schema")
+    
+    def _table_name(self, base_name):
+        """Get actual table name with prefix if in shared mode."""
+        return f"{self.table_prefix}{base_name}"
     
     def check_and_init_schema(self):
         """
@@ -100,9 +106,9 @@ class PostgreSQLSchema:
         similar to SQLite's automatic table creation.
         """
         # Check if metadata table exists
-        if not self.conn.table_exists('metadata'):
+        if not self.conn.table_exists(self._table_name('metadata')):
             # First time setup - create all tables
-            self.log.info("Creating new PostgreSQL Enhanced schema")
+            self.log.info(f"Creating new PostgreSQL Enhanced schema{' with prefix: ' + self.table_prefix if self.table_prefix else ''}")
             self._create_schema()
         else:
             # Check schema version and upgrade if needed
@@ -122,8 +128,8 @@ class PostgreSQLSchema:
         if self.use_jsonb:
             # Enhanced metadata with JSON support
             # JSONSerializer expects json_data column for metadata
-            self.conn.execute("""
-                CREATE TABLE IF NOT EXISTS metadata (
+            self.conn.execute(f"""
+                CREATE TABLE IF NOT EXISTS {self._table_name('metadata')} (
                     setting VARCHAR(255) PRIMARY KEY,
                     value BYTEA,  -- Keep for compatibility
                     json_data JSONB,  -- JSONSerializer uses this
@@ -132,8 +138,8 @@ class PostgreSQLSchema:
             """)
         else:
             # Basic metadata (blob only)
-            self.conn.execute("""
-                CREATE TABLE IF NOT EXISTS metadata (
+            self.conn.execute(f"""
+                CREATE TABLE IF NOT EXISTS {self._table_name('metadata')} (
                     setting VARCHAR(255) PRIMARY KEY,
                     value BYTEA
                 )
@@ -184,10 +190,11 @@ class PostgreSQLSchema:
         """)
         
         # Create name group table
+        # DBAPI expects columns named 'name' and 'grouping'
         self.conn.execute("""
             CREATE TABLE IF NOT EXISTS name_group (
-                key VARCHAR(255) PRIMARY KEY,
-                value VARCHAR(255)
+                name VARCHAR(255) PRIMARY KEY,
+                grouping VARCHAR(255)
             )
         """)
         

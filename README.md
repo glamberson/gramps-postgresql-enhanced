@@ -85,19 +85,23 @@ ln -s $(pwd) ~/.local/share/gramps/gramps60/plugins/PostgreSQLEnhanced
 
 ## Setup
 
-### 1. Create PostgreSQL Database
+### 1. PostgreSQL Initial Setup (One-time)
 
 ```bash
-# Create user and database
+# Create user with database creation privileges
 sudo -u postgres createuser -P gramps_user
-sudo -u postgres createdb -O gramps_user gramps_db
+sudo -u postgres psql -c "ALTER USER gramps_user CREATEDB;"
 
-# Grant permissions and install extensions
-sudo -u postgres psql -d gramps_db <<EOF
-GRANT ALL ON DATABASE gramps_db TO gramps_user;
+# Create template database with required extensions
+sudo -u postgres psql <<EOF
+CREATE DATABASE template_gramps TEMPLATE template0;
+\c template_gramps
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
-CREATE EXTENSION IF NOT EXISTS btree_gin;
 CREATE EXTENSION IF NOT EXISTS pg_trgm;
+CREATE EXTENSION IF NOT EXISTS btree_gin;
+CREATE EXTENSION IF NOT EXISTS intarray;
+GRANT ALL ON DATABASE template_gramps TO gramps_user;
+UPDATE pg_database SET datistemplate = true WHERE datname = 'template_gramps';
 EOF
 ```
 
@@ -105,20 +109,50 @@ EOF
 
 ### 2. Create Family Tree
 
-1. File → Family Trees
-2. New
-3. Database Type: "PostgreSQL Enhanced"
-4. Connection string options:
-   ```
-   # URL format (recommended)
-   postgresql://gramps_user:password@localhost:5432/gramps_db
-   
-   # Traditional format
-   localhost:5432:gramps_db:public
-   
-   # Simple format (local only)
-   gramps_db
-   ```
+1. File → Family Trees → Manage Family Trees
+2. Click "New"
+3. Enter a name (e.g., "Smith Family")
+4. Database Type: Select "PostgreSQL Enhanced"
+5. Just click OK - the addon handles everything!
+
+The addon will:
+- Create a `connection_info.txt` from template
+- Automatically create the PostgreSQL database
+- Set up all required tables and indexes
+
+### 3. Connection Configuration
+
+When you create a new family tree, a `connection_info.txt` file is created in the database directory. You can edit this file to customize settings:
+
+```ini
+# Connection details
+host = localhost
+port = 5432
+user = gramps_user
+password = your_password
+
+# Database mode: 'separate' or 'shared'
+# separate = Each family tree gets its own PostgreSQL database
+# shared = All family trees in one database with table prefixes
+database_mode = separate
+
+# For shared mode, specify the shared database name
+shared_database_name = gramps_shared
+```
+
+#### Database Modes
+
+**Separate Database Mode** (Recommended):
+- Each family tree is a completely separate PostgreSQL database
+- Full isolation between trees
+- Easy backup/restore per tree
+- Requires CREATEDB privilege
+
+**Shared Database Mode**:
+- All trees share one PostgreSQL database
+- Tables are prefixed with tree name (e.g., `smith_family_person`)
+- Works without CREATEDB privilege
+- More complex backup/restore
 
 ## Migration
 

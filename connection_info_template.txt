@@ -1,0 +1,20 @@
+# PostgreSQL Enhanced Connection Configuration
+# Copy this file to connection_info.txt in your database directory
+
+# Connection details
+host = 192.168.10.90
+port = 5432
+user = genealogy_user
+password = GenealogyData2025
+
+# Database mode: 'separate' or 'shared'
+# separate = Each family tree gets its own PostgreSQL database (requires CREATEDB privilege)
+# shared = All family trees in one database with table prefixes
+database_mode = separate
+
+# For shared mode, specify the shared database name
+shared_database_name = gramps_shared
+
+# Optional settings
+# pool_size = 10
+# sslmode = prefer
