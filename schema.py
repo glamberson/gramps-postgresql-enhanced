@@ -190,12 +190,12 @@ class PostgreSQLSchema:
             )
         """)
         
-        # Set initial schema version
-        self._set_schema_version(SCHEMA_VERSION)
-        
-        # Create PostgreSQL-specific features if requested
+        # Create PostgreSQL-specific features FIRST (includes extensions)
         if self.use_jsonb:
             self._create_enhanced_features()
+        
+        # Set initial schema version
+        self._set_schema_version(SCHEMA_VERSION)
         
         self.conn.commit()
         self.log.info("PostgreSQL Enhanced schema created successfully")
@@ -325,11 +325,20 @@ class PostgreSQLSchema:
             
         elif obj_type == 'note':
             # Full-text search on notes
-            if self._check_extension_available('pg_trgm'):
-                self.conn.execute(f"""
-                    CREATE INDEX IF NOT EXISTS idx_note_text_trgm
-                        ON note USING GIN ((json_data->>'text') gin_trgm_ops)
+            try:
+                # Check if pg_trgm is loaded
+                cur = self.conn.execute("""
+                    SELECT EXISTS (
+                        SELECT 1 FROM pg_extension WHERE extname = 'pg_trgm'
+                    )
                 """)
+                if cur.fetchone()[0]:
+                    self.conn.execute(f"""
+                        CREATE INDEX IF NOT EXISTS idx_note_text_trgm
+                            ON note USING GIN ((json_data->>'text') gin_trgm_ops)
+                    """)
+            except Exception as e:
+                self.log.debug(f"Could not create trigram index on notes: {e}")
     
     def _create_sync_trigger(self, obj_type):
         """Create trigger to sync secondary columns from JSONB data."""
