@@ -100,6 +100,19 @@ MIN_POSTGRESQL_VERSION = 15
 # Create logger
 LOG = logging.getLogger(".PostgreSQLEnhanced")
 
+# Enable debug logging if environment variable is set
+if os.environ.get('GRAMPS_POSTGRESQL_DEBUG'):
+    LOG.setLevel(logging.DEBUG)
+    # Also add a file handler for detailed debugging
+    debug_handler = logging.FileHandler(
+        os.path.expanduser('~/.gramps/postgresql_enhanced_debug.log')
+    )
+    debug_handler.setFormatter(logging.Formatter(
+        '%(asctime)s - %(name)s - %(levelname)s - %(funcName)s:%(lineno)d - %(message)s'
+    ))
+    LOG.addHandler(debug_handler)
+    LOG.debug("Debug logging enabled for PostgreSQL Enhanced")
+
 # -------------------------------------------------------------------------
 #
 # PostgreSQLEnhanced class
