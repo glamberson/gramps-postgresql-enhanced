@@ -318,6 +318,11 @@ class PostgreSQLEnhanced(DBAPI):
         # Create connection
         try:
             self.dbapi = PostgreSQLConnection(connection_string, username, password)
+            
+            # In monolithic mode, wrap the connection to add table prefixes
+            if hasattr(self, 'table_prefix') and self.table_prefix:
+                self.dbapi = TablePrefixWrapper(self.dbapi, self.table_prefix)
+                
         except Exception as e:
             raise DbConnectionError(str(e), connection_string)
         
@@ -585,3 +590,230 @@ class PostgreSQLEnhanced(DBAPI):
             stats.update(self.enhanced_queries.get_statistics())
         
         return stats
+    
+    def _get_metadata(self, key, default="_"):
+        """
+        Override to handle table prefixes in monolithic mode.
+        """
+        if hasattr(self, 'table_prefix') and self.table_prefix:
+            # In monolithic mode, use prefixed table name
+            self.dbapi.execute(f"SELECT 1 FROM {self.table_prefix}metadata WHERE setting = %s", [key])
+        else:
+            # In separate mode, use standard query
+            self.dbapi.execute("SELECT 1 FROM metadata WHERE setting = ?", [key])
+        row = self.dbapi.fetchone()
+        if row:
+            self.dbapi.execute(f"SELECT value FROM {self.table_prefix if hasattr(self, 'table_prefix') and self.table_prefix else ''}metadata WHERE setting = %s", [key])
+            row = self.dbapi.fetchone()
+            if row and row[0]:
+                try:
+                    return pickle.loads(row[0])
+                except:
+                    return row[0]
+        elif default == "_":
+            return []
+        else:
+            return default
+    
+    def _set_metadata(self, key, value, use_txn=True):
+        """
+        Override to handle table prefixes in monolithic mode.
+        """
+        if use_txn:
+            self._txn_begin()
+        
+        table_name = f"{self.table_prefix if hasattr(self, 'table_prefix') and self.table_prefix else ''}metadata"
+        
+        self.dbapi.execute(f"SELECT 1 FROM {table_name} WHERE setting = %s", [key])
+        row = self.dbapi.fetchone()
+        if row:
+            self.dbapi.execute(
+                f"UPDATE {table_name} SET value = %s WHERE setting = %s",
+                [pickle.dumps(value), key]
+            )
+        else:
+            self.dbapi.execute(
+                f"INSERT INTO {table_name} (setting, value) VALUES (%s, %s)", 
+                [key, pickle.dumps(value)]
+            )
+        if use_txn:
+            self._txn_commit()
+
+
+class TablePrefixWrapper:
+    """
+    Wraps a database connection to automatically add table prefixes in queries.
+    
+    This allows the standard DBAPI to work with prefixed tables in monolithic mode.
+    """
+    
+    # Tables that should have prefixes
+    PREFIXED_TABLES = {
+        'person', 'family', 'event', 'place', 'source', 'citation',
+        'repository', 'media', 'note', 'tag', 'metadata', 'reference',
+        'gender_stats'
+    }
+    
+    # Tables that are shared (no prefix)
+    SHARED_TABLES = {'name_group', 'surname'}
+    
+    def __init__(self, connection, table_prefix):
+        """Initialize wrapper with connection and prefix."""
+        self._connection = connection
+        self._prefix = table_prefix
+        
+    def execute(self, query, params=None):
+        """Execute query with table prefixes added."""
+        # Add prefixes to table names in the query
+        modified_query = self._add_table_prefixes(query)
+        
+        # Log for debugging
+        if query != modified_query:
+            LOG.debug(f"Query modified: {query} -> {modified_query}")
+            
+        return self._connection.execute(modified_query, params)
+    
+    def cursor(self):
+        """Return a wrapped cursor that prefixes queries."""
+        # NO FALLBACK: Must wrap cursor to catch ALL queries
+        return CursorPrefixWrapper(self._connection.cursor(), self._prefix)
+    
+    def _add_table_prefixes(self, query):
+        """Add table prefixes to a query."""
+        # NO FALLBACK: We must handle ALL query patterns comprehensively
+        import re
+        
+        modified = query
+        
+        for table in self.PREFIXED_TABLES:
+            # Match table name as whole word (not part of another word)
+            # Handle ALL SQL patterns that DBAPI might generate
+            patterns = [
+                # SELECT patterns - MUST handle queries without keywords before FROM
+                (rf'\bSELECT\s+(.+?)\s+FROM\s+({table})\b', 
+                 lambda m: f"SELECT {m.group(1)} FROM {self._prefix}{m.group(2)}"),
+                
+                # Basic patterns with keywords before table name
+                (rf'\b(FROM)\s+({table})\b', rf'\1 {self._prefix}\2'),
+                (rf'\b(JOIN)\s+({table})\b', rf'\1 {self._prefix}\2'),
+                (rf'\b(INTO)\s+({table})\b', rf'\1 {self._prefix}\2'),
+                (rf'\b(UPDATE)\s+({table})\b', rf'\1 {self._prefix}\2'),
+                (rf'\b(DELETE\s+FROM)\s+({table})\b', rf'\1 {self._prefix}\2'),
+                (rf'\b(INSERT\s+INTO)\s+({table})\b', rf'\1 {self._prefix}\2'),
+                (rf'\b(ALTER\s+TABLE)\s+({table})\b', rf'\1 {self._prefix}\2'),
+                (rf'\b(DROP\s+TABLE\s+IF\s+EXISTS)\s+({table})\b', rf'\1 {self._prefix}\2'),
+                (rf'\b(CREATE\s+TABLE\s+IF\s+NOT\s+EXISTS)\s+({table})\b', rf'\1 {self._prefix}\2'),
+                (rf'\b(CREATE\s+TABLE)\s+({table})\b', rf'\1 {self._prefix}\2'),
+                (rf'\b(CREATE\s+INDEX\s+\S+\s+ON)\s+({table})\b', rf'\1 {self._prefix}\2'),
+                (rf'\b(CREATE\s+UNIQUE\s+INDEX\s+\S+\s+ON)\s+({table})\b', rf'\1 {self._prefix}\2'),
+                (rf'\b(DROP\s+INDEX\s+IF\s+EXISTS\s+\S+\s+ON)\s+({table})\b', rf'\1 {self._prefix}\2'),
+                (rf'\b(REFERENCES)\s+({table})\b', rf'\1 {self._prefix}\2'),
+                
+                # EXISTS patterns
+                (rf'\b(EXISTS)\s+({table})\b', rf'\1 {self._prefix}\2'),
+                (rf'\bEXISTS\s*\(\s*SELECT\s+.+?\s+FROM\s+({table})\b',
+                 lambda m: m.group(0).replace(f'FROM {m.group(1)}', f'FROM {self._prefix}{m.group(1)}')),
+                
+                # Table name in WHERE clauses with table.column syntax
+                (rf'\b({table})\.(\w+)', rf'{self._prefix}\1.\2'),
+            ]
+            
+            for pattern, replacement in patterns:
+                if callable(replacement):
+                    # Use callable for complex replacements
+                    modified = re.sub(pattern, replacement, modified, flags=re.IGNORECASE | re.DOTALL)
+                else:
+                    modified = re.sub(pattern, replacement, modified, flags=re.IGNORECASE)
+        
+        return modified
+    
+    def __getattr__(self, name):
+        """Forward all other attributes to the wrapped connection."""
+        return getattr(self._connection, name)
+
+
+class CursorPrefixWrapper:
+    """
+    Wraps a database cursor to automatically add table prefixes in queries.
+    """
+    
+    def __init__(self, cursor, table_prefix):
+        """Initialize wrapper with cursor and prefix."""
+        self._cursor = cursor
+        self._prefix = table_prefix
+        
+    def execute(self, query, params=None):
+        """Execute query with table prefixes added."""
+        # Reuse the same prefix logic from TablePrefixWrapper
+        modified_query = self._add_table_prefixes(query)
+        
+        # Log for debugging
+        if query != modified_query:
+            LOG.debug(f"Cursor query modified: {query} -> {modified_query}")
+            
+        return self._cursor.execute(modified_query, params)
+    
+    def _add_table_prefixes(self, query):
+        """Add table prefixes to a query."""
+        # NO FALLBACK: We must handle ALL query patterns comprehensively
+        import re
+        
+        modified = query
+        
+        # Use same tables as TablePrefixWrapper
+        PREFIXED_TABLES = TablePrefixWrapper.PREFIXED_TABLES
+        
+        for table in PREFIXED_TABLES:
+            # Match table name as whole word (not part of another word)
+            # Handle ALL SQL patterns that DBAPI might generate
+            patterns = [
+                # SELECT patterns - MUST handle queries without keywords before FROM
+                (rf'\bSELECT\s+(.+?)\s+FROM\s+({table})\b', 
+                 lambda m: f"SELECT {m.group(1)} FROM {self._prefix}{m.group(2)}"),
+                
+                # Basic patterns with keywords before table name
+                (rf'\b(FROM)\s+({table})\b', rf'\1 {self._prefix}\2'),
+                (rf'\b(JOIN)\s+({table})\b', rf'\1 {self._prefix}\2'),
+                (rf'\b(INTO)\s+({table})\b', rf'\1 {self._prefix}\2'),
+                (rf'\b(UPDATE)\s+({table})\b', rf'\1 {self._prefix}\2'),
+                (rf'\b(DELETE\s+FROM)\s+({table})\b', rf'\1 {self._prefix}\2'),
+                (rf'\b(INSERT\s+INTO)\s+({table})\b', rf'\1 {self._prefix}\2'),
+                (rf'\b(ALTER\s+TABLE)\s+({table})\b', rf'\1 {self._prefix}\2'),
+                (rf'\b(DROP\s+TABLE\s+IF\s+EXISTS)\s+({table})\b', rf'\1 {self._prefix}\2'),
+                (rf'\b(CREATE\s+TABLE\s+IF\s+NOT\s+EXISTS)\s+({table})\b', rf'\1 {self._prefix}\2'),
+                (rf'\b(CREATE\s+TABLE)\s+({table})\b', rf'\1 {self._prefix}\2'),
+                (rf'\b(CREATE\s+INDEX\s+\S+\s+ON)\s+({table})\b', rf'\1 {self._prefix}\2'),
+                (rf'\b(CREATE\s+UNIQUE\s+INDEX\s+\S+\s+ON)\s+({table})\b', rf'\1 {self._prefix}\2'),
+                (rf'\b(DROP\s+INDEX\s+IF\s+EXISTS\s+\S+\s+ON)\s+({table})\b', rf'\1 {self._prefix}\2'),
+                (rf'\b(REFERENCES)\s+({table})\b', rf'\1 {self._prefix}\2'),
+                
+                # EXISTS patterns
+                (rf'\b(EXISTS)\s+({table})\b', rf'\1 {self._prefix}\2'),
+                (rf'\bEXISTS\s*\(\s*SELECT\s+.+?\s+FROM\s+({table})\b',
+                 lambda m: m.group(0).replace(f'FROM {m.group(1)}', f'FROM {self._prefix}{m.group(1)}')),
+                
+                # Table name in WHERE clauses with table.column syntax
+                (rf'\b({table})\.(\w+)', rf'{self._prefix}\1.\2'),
+            ]
+            
+            for pattern, replacement in patterns:
+                if callable(replacement):
+                    # Use callable for complex replacements
+                    modified = re.sub(pattern, replacement, modified, flags=re.IGNORECASE | re.DOTALL)
+                else:
+                    modified = re.sub(pattern, replacement, modified, flags=re.IGNORECASE)
+        
+        return modified
+    
+    def __enter__(self):
+        """Support context manager protocol."""
+        self._cursor.__enter__()
+        return self
+    
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        """Support context manager protocol."""
+        return self._cursor.__exit__(exc_type, exc_val, exc_tb)
+    
+    def __getattr__(self, name):
+        """Forward all other attributes to the wrapped cursor."""
+        return getattr(self._cursor, name)

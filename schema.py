@@ -150,8 +150,8 @@ class PostgreSQLSchema:
             self._create_object_table(obj_type)
         
         # Create reference table (for backlinks)
-        self.conn.execute("""
-            CREATE TABLE IF NOT EXISTS reference (
+        self.conn.execute(f"""
+            CREATE TABLE IF NOT EXISTS {self._table_name('reference')} (
                 obj_handle VARCHAR(50),
                 obj_class VARCHAR(50),
                 ref_handle VARCHAR(50),
@@ -161,19 +161,19 @@ class PostgreSQLSchema:
         """)
         
         # Create indexes for references
-        self.conn.execute("""
+        self.conn.execute(f"""
             CREATE INDEX IF NOT EXISTS idx_reference_ref 
-                ON reference (ref_handle, ref_class)
+                ON {self._table_name('reference')} (ref_handle, ref_class)
         """)
         
-        self.conn.execute("""
+        self.conn.execute(f"""
             CREATE INDEX IF NOT EXISTS idx_reference_obj 
-                ON reference (obj_handle, obj_class)
+                ON {self._table_name('reference')} (obj_handle, obj_class)
         """)
         
         # Create gender stats table
-        self.conn.execute("""
-            CREATE TABLE IF NOT EXISTS gender_stats (
+        self.conn.execute(f"""
+            CREATE TABLE IF NOT EXISTS {self._table_name('gender_stats')} (
                 given_name VARCHAR(255) PRIMARY KEY,
                 male INTEGER DEFAULT 0,
                 female INTEGER DEFAULT 0,
@@ -237,7 +237,7 @@ class PostgreSQLSchema:
                 regular_cols_sql = ",\n                    ".join(regular_columns) + ",\n                    "
             
             self.conn.execute(f"""
-                CREATE TABLE IF NOT EXISTS {obj_type} (
+                CREATE TABLE IF NOT EXISTS {self._table_name(obj_type)} (
                     handle VARCHAR(50) PRIMARY KEY,
                     json_data JSONB NOT NULL,  -- JSONSerializer stores here
                     {regular_cols_sql}change_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -248,14 +248,14 @@ class PostgreSQLSchema:
             if obj_type in REQUIRED_INDEXES:
                 for column in REQUIRED_INDEXES[obj_type]:
                     self.conn.execute(f"""
-                        CREATE INDEX IF NOT EXISTS idx_{obj_type}_{column} 
-                        ON {obj_type} ({column})
+                        CREATE INDEX IF NOT EXISTS idx_{self.table_prefix}{obj_type}_{column} 
+                        ON {self._table_name(obj_type)} ({column})
                     """)
             
             # Create GIN index for general JSONB queries
             self.conn.execute(f"""
-                CREATE INDEX IF NOT EXISTS idx_{obj_type}_json 
-                    ON {obj_type} USING GIN (json_data)
+                CREATE INDEX IF NOT EXISTS idx_{self.table_prefix}{obj_type}_json 
+                    ON {self._table_name(obj_type)} USING GIN (json_data)
             """)
             
             # Create object-specific indexes
@@ -264,7 +264,7 @@ class PostgreSQLSchema:
         else:
             # Basic table (blob only)
             self.conn.execute(f"""
-                CREATE TABLE IF NOT EXISTS {obj_type} (
+                CREATE TABLE IF NOT EXISTS {self._table_name(obj_type)} (
                     handle VARCHAR(50) PRIMARY KEY,
                     blob_data BYTEA
                 )
@@ -278,42 +278,42 @@ class PostgreSQLSchema:
         if obj_type == 'person':
             # Name searches
             self.conn.execute(f"""
-                CREATE INDEX IF NOT EXISTS idx_person_names 
-                    ON person USING GIN ((json_data->'names'))
+                CREATE INDEX IF NOT EXISTS idx_{self.table_prefix}person_names 
+                    ON {self._table_name('person')} USING GIN ((json_data->'names'))
             """)
             
             # Birth/death dates
             self.conn.execute(f"""
-                CREATE INDEX IF NOT EXISTS idx_person_birth_date 
-                    ON person ((json_data->'birth_ref_index'->>'date'))
+                CREATE INDEX IF NOT EXISTS idx_{self.table_prefix}person_birth_date 
+                    ON {self._table_name('person')} ((json_data->'birth_ref_index'->>'date'))
             """)
             
         elif obj_type == 'family':
             # Parent searches
             self.conn.execute(f"""
-                CREATE INDEX IF NOT EXISTS idx_family_parents 
-                    ON family USING GIN ((json_data->'parent_handles'))
+                CREATE INDEX IF NOT EXISTS idx_{self.table_prefix}family_parents 
+                    ON {self._table_name('family')} USING GIN ((json_data->'parent_handles'))
             """)
             
         elif obj_type == 'event':
             # Event type and date
             self.conn.execute(f"""
-                CREATE INDEX IF NOT EXISTS idx_event_type_date 
-                    ON event ((json_data->>'type'), (json_data->>'date'))
+                CREATE INDEX IF NOT EXISTS idx_{self.table_prefix}event_type_date 
+                    ON {self._table_name('event')} ((json_data->>'type'), (json_data->>'date'))
             """)
             
         elif obj_type == 'place':
             # Place hierarchy
             self.conn.execute(f"""
-                CREATE INDEX IF NOT EXISTS idx_place_hierarchy 
-                    ON place USING GIN ((json_data->'placeref_list'))
+                CREATE INDEX IF NOT EXISTS idx_{self.table_prefix}place_hierarchy 
+                    ON {self._table_name('place')} USING GIN ((json_data->'placeref_list'))
             """)
             
         elif obj_type == 'source':
             # Source title
             self.conn.execute(f"""
-                CREATE INDEX IF NOT EXISTS idx_source_title 
-                    ON source ((json_data->>'title'))
+                CREATE INDEX IF NOT EXISTS idx_{self.table_prefix}source_title 
+                    ON {self._table_name('source')} ((json_data->>'title'))
             """)
             
         elif obj_type == 'note':
@@ -327,8 +327,8 @@ class PostgreSQLSchema:
                 """)
                 if cur.fetchone()[0]:
                     self.conn.execute(f"""
-                        CREATE INDEX IF NOT EXISTS idx_note_text_trgm
-                            ON note USING GIN ((json_data->>'text') gin_trgm_ops)
+                        CREATE INDEX IF NOT EXISTS idx_{self.table_prefix}note_text_trgm
+                            ON {self._table_name('note')} USING GIN ((json_data->>'text') gin_trgm_ops)
                     """)
             except Exception as e:
                 self.log.debug(f"Could not create trigram index on notes: {e}")
@@ -405,7 +405,7 @@ class PostgreSQLSchema:
     def _get_schema_version(self):
         """Get current schema version from metadata."""
         self.conn.execute(
-            "SELECT value FROM metadata WHERE setting = 'schema_version'"
+            f"SELECT value FROM {self._table_name('metadata')} WHERE setting = 'schema_version'"
         )
         row = self.conn.fetchone()
         if row and row[0]:
@@ -415,8 +415,8 @@ class PostgreSQLSchema:
     def _set_schema_version(self, version):
         """Set schema version in metadata."""
         if self.use_jsonb:
-            self.conn.execute("""
-                INSERT INTO metadata (setting, value, json_data)
+            self.conn.execute(f"""
+                INSERT INTO {self._table_name('metadata')} (setting, value, json_data)
                 VALUES ('schema_version', %s, %s)
                 ON CONFLICT (setting) DO UPDATE
                 SET value = EXCLUDED.value,
@@ -424,8 +424,8 @@ class PostgreSQLSchema:
                     updated_at = CURRENT_TIMESTAMP
             """, [pickle.dumps(version), Jsonb(version)])
         else:
-            self.conn.execute("""
-                INSERT INTO metadata (setting, value)
+            self.conn.execute(f"""
+                INSERT INTO {self._table_name('metadata')} (setting, value)
                 VALUES ('schema_version', %s)
                 ON CONFLICT (setting) DO UPDATE
                 SET value = EXCLUDED.value
