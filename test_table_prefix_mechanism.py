@@ -19,6 +19,9 @@ import re
 # Add plugin directory to Python path
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
+# Mock Gramps imports first
+import mock_gramps
+
 from connection import PostgreSQLConnection
 from schema import PostgreSQLSchema
 

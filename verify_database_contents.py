@@ -310,6 +310,10 @@ def verify_query_patterns():
     """Verify that our query patterns are working correctly."""
     print("\n=== VERIFYING QUERY PATTERN MATCHING ===")
 
+    import sys
+    import os
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    import mock_gramps
     from postgresqlenhanced import TablePrefixWrapper, CursorPrefixWrapper
 
     # Test queries that were failing before
