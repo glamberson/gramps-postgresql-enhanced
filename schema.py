@@ -296,7 +296,7 @@ class PostgreSQLSchema:
                 for column in REQUIRED_INDEXES[obj_type]:
                     self.conn.execute(
                         f"""
-                        CREATE INDEX IF NOT EXISTS idx_{self.table_prefix}{obj_type}_{column} 
+                        CREATE INDEX IF NOT EXISTS idx_{self.table_prefix}{obj_type}_{column}
                         ON {self._table_name(obj_type)} ({column})
                     """
                     )
@@ -341,7 +341,8 @@ class PostgreSQLSchema:
             self.conn.execute(
                 f"""
                 CREATE INDEX IF NOT EXISTS idx_{self.table_prefix}person_birth_date 
-                    ON {self._table_name('person')} ((json_data->'birth_ref_index'->>'date'))
+                    ON {self._table_name('person')} 
+                    ((json_data->'birth_ref_index'->>'date'))
             """
             )
 
@@ -350,7 +351,8 @@ class PostgreSQLSchema:
             self.conn.execute(
                 f"""
                 CREATE INDEX IF NOT EXISTS idx_{self.table_prefix}family_parents 
-                    ON {self._table_name('family')} USING GIN ((json_data->'parent_handles'))
+                    ON {self._table_name('family')} 
+                    USING GIN ((json_data->'parent_handles'))
             """
             )
 
@@ -359,7 +361,8 @@ class PostgreSQLSchema:
             self.conn.execute(
                 f"""
                 CREATE INDEX IF NOT EXISTS idx_{self.table_prefix}event_type_date 
-                    ON {self._table_name('event')} ((json_data->>'type'), (json_data->>'date'))
+                    ON {self._table_name('event')} 
+                    ((json_data->>'type'), (json_data->>'date'))
             """
             )
 
@@ -368,7 +371,8 @@ class PostgreSQLSchema:
             self.conn.execute(
                 f"""
                 CREATE INDEX IF NOT EXISTS idx_{self.table_prefix}place_hierarchy 
-                    ON {self._table_name('place')} USING GIN ((json_data->'placeref_list'))
+                    ON {self._table_name('place')} 
+                    USING GIN ((json_data->'placeref_list'))
             """
             )
 
@@ -396,7 +400,8 @@ class PostgreSQLSchema:
                     self.conn.execute(
                         f"""
                         CREATE INDEX IF NOT EXISTS idx_{self.table_prefix}note_text_trgm
-                            ON {self._table_name('note')} USING GIN ((json_data->>'text') gin_trgm_ops)
+                            ON {self._table_name('note')} USING GIN 
+                            ((json_data->>'text') gin_trgm_ops)
                     """
                     )
             except Exception as e:
