@@ -27,15 +27,18 @@ from gramps.gen.const import GRAMPS_LOCALE as glocale
 
 _ = glocale.translation.gettext
 
-register(DATABASE,
-    id='postgresqlenhanced',
+register(
+    DATABASE,
+    id="postgresqlenhanced",
     name=_("PostgreSQL Enhanced"),
-    name_accell=_("PostgreSQL _Enhanced Database"), 
-    description=_("EXPERIMENTAL: Advanced PostgreSQL backend with JSONB storage, "
-                  "graph database support (Apache AGE), vector similarity (pgvector), "
-                  "and AI/ML capabilities. For developers and advanced users only. "
-                  "Requires PostgreSQL 15+ with extensions."),
-    version = '1.0.2',
+    name_accell=_("PostgreSQL _Enhanced Database"),
+    description=_(
+        "EXPERIMENTAL: Advanced PostgreSQL backend with JSONB storage, "
+        "graph database support (Apache AGE), vector similarity (pgvector), "
+        "and AI/ML capabilities. For developers and advanced users only. "
+        "Requires PostgreSQL 15+ with extensions."
+    ),
+    version="1.0.2",
     gramps_target_version="6.0",
     status=STABLE,
     audience=DEVELOPER,  # Developer-level experimental features
@@ -46,7 +49,7 @@ register(DATABASE,
     maintainers=["Greg Lamberson"],
     maintainers_email=["lamberson@yahoo.com"],
     requires_mod=[],  # psycopg3 requirement handled separately
-    requires_exe=[],                   # No external executables required
-    depends_on=[],                     # No dependencies on other Gramps plugins
-    help_url="https://github.com/gramps-project/addons-source/wiki/PostgreSQLEnhanced"
+    requires_exe=[],  # No external executables required
+    depends_on=[],  # No dependencies on other Gramps plugins
+    help_url="https://github.com/gramps-project/addons-source/wiki/PostgreSQLEnhanced",
 )

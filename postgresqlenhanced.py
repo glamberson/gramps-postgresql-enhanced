@@ -39,7 +39,7 @@ import logging
 import os
 import re
 import pickle
-import json
+import sys
 from urllib.parse import urlparse, parse_qs
 
 # -------------------------------------------------------------------------
@@ -50,8 +50,9 @@ from urllib.parse import urlparse, parse_qs
 try:
     import psycopg
     from psycopg import sql
-    from psycopg.types.json import Jsonb
-    from psycopg.rows import dict_row
+
+    # from psycopg.types.json import Jsonb  # Currently unused
+    # from psycopg.rows import dict_row  # Currently unused
 
     PSYCOPG_AVAILABLE = True
     PSYCOPG_VERSION = tuple(map(int, psycopg.__version__.split(".")[:2]))
@@ -65,10 +66,11 @@ except ImportError:
 #
 # -------------------------------------------------------------------------
 from gramps.gen.const import GRAMPS_LOCALE as glocale
-from gramps.gen.db.dbconst import ARRAYSIZE
+
+# from gramps.gen.db.dbconst import ARRAYSIZE  # Currently unused
 from gramps.plugins.db.dbapi.dbapi import DBAPI
 from gramps.gen.db.exceptions import DbConnectionError
-from gramps.gen.lib.serialize import BlobSerializer, JSONSerializer
+from gramps.gen.lib.serialize import JSONSerializer
 
 # Get translation function for addon
 try:
@@ -78,18 +80,17 @@ except ValueError:
 _ = _trans.gettext
 
 # Import local modules - use absolute imports for Gramps plugins
-import sys
-import os
-
 plugin_dir = os.path.dirname(__file__)
 if plugin_dir not in sys.path:
     sys.path.insert(0, plugin_dir)
 
+# pylint: disable=wrong-import-position
 from connection import PostgreSQLConnection
 from schema import PostgreSQLSchema
 from migration import MigrationManager
 from queries import EnhancedQueries
 from schema_columns import REQUIRED_COLUMNS
+# pylint: enable=wrong-import-position
 
 # -------------------------------------------------------------------------
 #
@@ -101,22 +102,12 @@ MIN_POSTGRESQL_VERSION = 15
 
 # Import debugging utilities
 try:
-    from .debug_utils import (
-        DebugContext,
-        timed_method,
-        format_sql_query,
-        QueryProfiler,
-        TransactionTracker,
-        ConnectionMonitor,
-    )
+    from .debug_utils import DebugContext
 
     DEBUG_AVAILABLE = True
 except ImportError:
     # Fallback if debug_utils not available
     DEBUG_AVAILABLE = False
-
-    def timed_method(func):
-        return func
 
 
 # Create logger
@@ -142,11 +133,11 @@ if DEBUG_ENABLED:
         LOG.debug("Advanced debugging features available")
 
 
-#------------------------------------------------------------
+# ------------------------------------------------------------
 #
 # PostgreSQLEnhanced
 #
-#------------------------------------------------------------
+# ------------------------------------------------------------
 class PostgreSQLEnhanced(DBAPI):
     """
     PostgreSQL Enhanced interface for Gramps.
@@ -183,6 +174,18 @@ class PostgreSQLEnhanced(DBAPI):
         self.migration_manager = None
         self.enhanced_queries = None
         self._use_jsonb = True  # Default to using JSONB
+
+        # Initialize attributes that are set in _initialize
+        self.directory = None
+        self.table_prefix = ""
+        self.shared_db_mode = False
+        self.path = None
+        self.dbapi = None
+        self.serializer = None
+        self.readonly = False
+        self._is_open = False
+        self.undolog = None
+        self.undodb = None
 
         # Initialize debug context if available
         self._debug_context = None
@@ -272,8 +275,8 @@ class PostgreSQLEnhanced(DBAPI):
                             "events": stats[3] or 0,
                         }
 
-            except Exception as e:
-                LOG.debug(f"Error getting database info: {e}")
+            except (psycopg.Error, AttributeError, TypeError) as e:
+                LOG.debug("Error getting database info: %s", e)
 
         return summary
 
@@ -282,13 +285,23 @@ class PostgreSQLEnhanced(DBAPI):
         Initialize the PostgreSQL Enhanced database connection.
 
         The 'directory' parameter contains connection information:
-        - postgresql://user:pass@host:port/dbname
-        - host:port:dbname:schema
-        - dbname (for local connection)
+
+        * postgresql://user:pass@host:port/dbname
+        * host:port:dbname:schema
+        * dbname (for local connection)
 
         Special features can be enabled via query parameters:
-        - ?use_jsonb=false  (disable JSONB, use blob only)
-        - ?pool_size=10     (connection pool size)
+
+        * ?use_jsonb=false  (disable JSONB, use blob only)
+        * ?pool_size=10     (connection pool size)
+
+        :param directory: Path to database directory or connection string
+        :type directory: str
+        :param username: Database username (may be overridden by config)
+        :type username: str
+        :param password: Database password (may be overridden by config)
+        :type password: str
+        :raises DbConnectionError: If configuration cannot be loaded or connection fails
         """
         # Check if this is a Gramps file-based path (like /home/user/.local/share/gramps/grampsdb/xxx)
         # or a test directory with connection_info.txt
@@ -328,13 +341,21 @@ class PostgreSQLEnhanced(DBAPI):
                 # Sanitize tree name for use as table prefix
                 self.table_prefix = re.sub(r"[^a-zA-Z0-9_]", "_", tree_name) + "_"
                 self.shared_db_mode = True
-                LOG.info(f"Using shared database mode with prefix: {self.table_prefix}")
+                LOG.info(
+                    "Using shared database mode with prefix: %s", self.table_prefix
+                )
 
             # Build connection string
-            connection_string = f"postgresql://{config['user']}:{config['password']}@{config['host']}:{config['port']}/{db_name}"
+            connection_string = (
+                f"postgresql://{config['user']}:{config['password']}@"
+                f"{config['host']}:{config['port']}/{db_name}"
+            )
 
             LOG.info(
-                f"Tree name: '{tree_name}', Database: '{db_name}', Mode: '{config['database_mode']}'"
+                "Tree name: '%s', Database: '%s', Mode: '%s'",
+                tree_name,
+                db_name,
+                config["database_mode"],
             )
         else:
             # Direct connection string
@@ -357,7 +378,7 @@ class PostgreSQLEnhanced(DBAPI):
                 self.dbapi = TablePrefixWrapper(self.dbapi, self.table_prefix)
 
         except Exception as e:
-            raise DbConnectionError(str(e), connection_string)
+            raise DbConnectionError(str(e), connection_string) from e
 
         # Set serializer - DBAPI expects JSONSerializer
         # JSONSerializer has object_to_data method that DBAPI needs
@@ -386,33 +407,70 @@ class PostgreSQLEnhanced(DBAPI):
         self._is_open = True
 
     def is_open(self):
-        """Return True if the database is open."""
+        """
+        Return True if the database is open.
+
+        :returns: Whether the database connection is currently open
+        :rtype: bool
+        """
         return getattr(self, "_is_open", False)
 
-    def open(self, value=None):
-        """Open database - compatibility method for Gramps."""
+    def open(self, _value=None):
+        """
+        Open database - compatibility method for Gramps.
+
+        :param value: Unused parameter for compatibility
+        :type value: object
+        :returns: Always returns True as database is opened in load()
+        :rtype: bool
+        """
         # Database is already open from load()
         return True
 
     def load(
         self,
         directory,
-        callback=None,
-        mode=None,
-        force_schema_upgrade=False,
-        force_bsddb_upgrade=False,
-        force_bsddb_downgrade=False,
-        force_python_upgrade=False,
+        _callback=None,
+        _mode=None,
+        _force_schema_upgrade=False,
+        _force_bsddb_upgrade=False,
+        _force_bsddb_downgrade=False,
+        _force_python_upgrade=False,
         user=None,
         password=None,
         username=None,
-        *args,
-        **kwargs,
+        *_args,
+        **_kwargs,
     ):
         """
         Load database - Gramps compatibility method.
 
         Gramps calls this with various parameters, we only need directory, username, and password.
+
+        :param directory: Path to database directory or connection string
+        :type directory: str
+        :param callback: Progress callback function (unused)
+        :type callback: callable
+        :param mode: Database mode (unused)
+        :type mode: str
+        :param force_schema_upgrade: Force schema upgrade (unused)
+        :type force_schema_upgrade: bool
+        :param force_bsddb_upgrade: Force BSDDB upgrade (unused)
+        :type force_bsddb_upgrade: bool
+        :param force_bsddb_downgrade: Force BSDDB downgrade (unused)
+        :type force_bsddb_downgrade: bool
+        :param force_python_upgrade: Force Python upgrade (unused)
+        :type force_python_upgrade: bool
+        :param user: Database username (alternative to username)
+        :type user: str
+        :param password: Database password
+        :type password: str
+        :param username: Database username (alternative to user)
+        :type username: str
+        :param args: Additional positional arguments (unused)
+        :param kwargs: Additional keyword arguments (unused)
+        :returns: Always returns True
+        :rtype: bool
         """
         # Handle both 'user' and 'username' parameters
         actual_username = username or user or None
@@ -433,7 +491,14 @@ class PostgreSQLEnhanced(DBAPI):
         self._set_metadata("version", "21")
 
     def _load_connection_config(self, directory):
-        """Load connection configuration from connection_info.txt."""
+        """
+        Load connection configuration from connection_info.txt.
+
+        :param directory: Path to the database directory containing config file
+        :type directory: str
+        :returns: Dictionary containing connection configuration
+        :rtype: dict
+        """
         config_path = os.path.join(directory, "connection_info.txt")
         config = {
             "host": "localhost",
@@ -445,8 +510,8 @@ class PostgreSQLEnhanced(DBAPI):
         }
 
         if os.path.exists(config_path):
-            LOG.info(f"Loading connection config from: {config_path}")
-            with open(config_path, "r") as f:
+            LOG.info("Loading connection config from: %s", config_path)
+            with open(config_path, "r", encoding="utf-8") as f:
                 for line in f:
                     line = line.strip()
                     if line and not line.startswith("#") and "=" in line:
@@ -454,7 +519,7 @@ class PostgreSQLEnhanced(DBAPI):
                         config[key.strip()] = value.strip()
         else:
             LOG.warning(
-                f"No connection_info.txt found at {config_path}, using defaults"
+                "No connection_info.txt found at %s, using defaults", config_path
             )
             # Try to create template for user
             template_path = os.path.join(
@@ -465,25 +530,36 @@ class PostgreSQLEnhanced(DBAPI):
                     import shutil
 
                     shutil.copy(template_path, config_path)
-                    LOG.info(f"Created connection_info.txt template at {config_path}")
+                    LOG.info("Created connection_info.txt template at %s", config_path)
                     # Now read the template we just created
-                    with open(config_path, "r") as f:
+                    with open(config_path, "r", encoding="utf-8") as f:
                         for line in f:
                             line = line.strip()
                             if line and not line.startswith("#") and "=" in line:
                                 key, value = line.split("=", 1)
                                 config[key.strip()] = value.strip()
-                    LOG.info(f"Loaded configuration from template")
-                except Exception as e:
-                    LOG.debug(f"Could not create config template: {e}")
+                    LOG.info("Loaded configuration from template")
+                except (OSError, IOError, shutil.Error) as e:
+                    LOG.debug("Could not create config template: %s", e)
 
         return config
 
     def _ensure_database_exists(self, db_name, config):
-        """Create PostgreSQL database if it doesn't exist (for separate database mode)."""
+        """
+        Create PostgreSQL database if it doesn't exist (for separate database mode).
+
+        :param db_name: Name of the database to create
+        :type db_name: str
+        :param config: Database connection configuration
+        :type config: dict
+        :raises psycopg.Error: If database creation fails
+        """
         try:
             # Connect to 'postgres' database to check/create the target database
-            temp_conn_string = f"postgresql://{config['user']}:{config['password']}@{config['host']}:{config['port']}/postgres"
+            temp_conn_string = (
+                f"postgresql://{config['user']}:{config['password']}@"
+                f"{config['host']}:{config['port']}/postgres"
+            )
             temp_conn = psycopg.connect(temp_conn_string)
             temp_conn.autocommit = True
 
@@ -492,30 +568,36 @@ class PostgreSQLEnhanced(DBAPI):
                 cur.execute("SELECT 1 FROM pg_database WHERE datname = %s", [db_name])
                 if not cur.fetchone():
                     # Create database using template with extensions
-                    LOG.info(f"Creating new PostgreSQL database: {db_name}")
+                    LOG.info("Creating new PostgreSQL database: %s", db_name)
                     cur.execute(
                         sql.SQL("CREATE DATABASE {} TEMPLATE template_gramps").format(
                             sql.Identifier(db_name)
                         )
                     )
-                    LOG.info(f"Successfully created database: {db_name}")
+                    LOG.info("Successfully created database: %s", db_name)
                 else:
-                    LOG.info(f"Database already exists: {db_name}")
+                    LOG.info("Database already exists: %s", db_name)
 
             temp_conn.close()
 
         except psycopg.errors.InsufficientPrivilege:
             LOG.error(
-                f"User '{config['user']}' lacks CREATE DATABASE privilege. "
-                f"Please create database '{db_name}' manually or grant CREATEDB privilege."
+                "User '%s' lacks CREATE DATABASE privilege. "
+                "Please create database '%s' manually or grant CREATEDB privilege.",
+                config['user'], db_name
             )
             raise
         except Exception as e:
-            LOG.error(f"Error checking/creating database: {e}")
+            LOG.error("Error checking/creating database: %s", e)
             raise
 
     def _parse_connection_options(self, connection_string):
-        """Parse connection options from the connection string."""
+        """
+        Parse connection options from the connection string.
+
+        :param connection_string: PostgreSQL connection string with optional parameters
+        :type connection_string: str
+        """
         if connection_string.startswith("postgresql://"):
             parsed = urlparse(connection_string)
             if parsed.query:
@@ -530,6 +612,9 @@ class PostgreSQLEnhanced(DBAPI):
 
         This extracts values from the JSONB column and updates the
         secondary columns that DBAPI expects for queries.
+
+        :param obj: Gramps object to update secondary values for
+        :type obj: gramps.gen.lib.PrimaryObject
         """
         table = obj.__class__.__name__.lower()
         # Use table prefix if in shared mode
@@ -537,13 +622,9 @@ class PostgreSQLEnhanced(DBAPI):
             f"{self.table_prefix}{table}" if hasattr(self, "table_prefix") else table
         )
 
-        # Get the JSON data
-        json_obj = self.serializer.object_to_data(obj)
-
         # Build UPDATE statement based on object type
         if table in REQUIRED_COLUMNS:
             sets = []
-            values = []
 
             for col_name, json_path in REQUIRED_COLUMNS[table].items():
                 sets.append(f"{col_name} = ({json_path})")
@@ -551,7 +632,7 @@ class PostgreSQLEnhanced(DBAPI):
             if sets:
                 # Execute UPDATE using JSONB extraction
                 query = f"""
-                    UPDATE {table_name} 
+                    UPDATE {table_name}
                     SET {', '.join(sets)}
                     WHERE handle = %s
                 """
@@ -564,8 +645,10 @@ class PostgreSQLEnhanced(DBAPI):
                 self.dbapi.execute(
                     f"""
                     UPDATE {table_name}
-                    SET given_name = COALESCE(json_data->'primary_name'->>'first_name', ''),
-                        surname = COALESCE(json_data->'primary_name'->'surname_list'->0->>'surname', '')
+                    SET given_name = COALESCE(
+                        json_data->'primary_name'->>'first_name', ''),
+                        surname = COALESCE(
+                            json_data->'primary_name'->'surname_list'->0->>'surname', '')
                     WHERE handle = %s
                 """,
                     [obj.handle],
@@ -582,8 +665,13 @@ class PostgreSQLEnhanced(DBAPI):
                     [obj.handle],
                 )
 
-    def close(self, *args, **kwargs):
-        """Close the database connection."""
+    def close(self, *_args, **_kwargs):
+        """
+        Close the database connection.
+
+        :param args: Additional positional arguments (unused)
+        :param kwargs: Additional keyword arguments (unused)
+        """
         if hasattr(self, "dbapi") and self.dbapi:
             self.dbapi.close()
         self._is_open = False
@@ -591,7 +679,12 @@ class PostgreSQLEnhanced(DBAPI):
 
     # Migration methods
     def has_migration_available(self):
-        """Check if migration from another backend is available."""
+        """
+        Check if migration from another backend is available.
+
+        :returns: True if migration is available, False otherwise
+        :rtype: bool
+        """
         if self.migration_manager:
             return self.migration_manager.detect_migration_needed() is not None
         return False
@@ -601,7 +694,12 @@ class PostgreSQLEnhanced(DBAPI):
         Migrate data from a SQLite database.
 
         :param sqlite_path: Path to SQLite database file
+        :type sqlite_path: str
         :param callback: Progress callback function
+        :type callback: callable
+        :returns: True if migration successful
+        :rtype: bool
+        :raises RuntimeError: If migration manager not initialized
         """
         if not self.migration_manager:
             raise RuntimeError(_("Migration manager not initialized"))
@@ -613,6 +711,10 @@ class PostgreSQLEnhanced(DBAPI):
         Upgrade from standard PostgreSQL backend to Enhanced.
 
         :param callback: Progress callback function
+        :type callback: callable
+        :returns: True if migration successful
+        :rtype: bool
+        :raises RuntimeError: If migration manager not initialized
         """
         if not self.migration_manager:
             raise RuntimeError(_("Migration manager not initialized"))
@@ -621,25 +723,60 @@ class PostgreSQLEnhanced(DBAPI):
 
     # Enhanced query methods (only available with JSONB)
     def find_common_ancestors(self, handle1, handle2):
-        """Find common ancestors between two people."""
+        """
+        Find common ancestors between two people.
+
+        :param handle1: Handle of the first person
+        :type handle1: str
+        :param handle2: Handle of the second person
+        :type handle2: str
+        :returns: List of common ancestor handles
+        :rtype: list
+        :raises RuntimeError: If enhanced queries not available
+        """
         if not self.enhanced_queries:
             raise RuntimeError(_("Enhanced queries require JSONB support"))
         return self.enhanced_queries.find_common_ancestors(handle1, handle2)
 
     def find_relationship_path(self, handle1, handle2, max_depth=15):
-        """Find the shortest relationship path between two people."""
+        """
+        Find the shortest relationship path between two people.
+
+        :param handle1: Handle of the first person
+        :type handle1: str
+        :param handle2: Handle of the second person
+        :type handle2: str
+        :param max_depth: Maximum relationship depth to search
+        :type max_depth: int
+        :returns: List of handles representing the path
+        :rtype: list
+        :raises RuntimeError: If enhanced queries not available
+        """
         if not self.enhanced_queries:
             raise RuntimeError(_("Enhanced queries require JSONB support"))
         return self.enhanced_queries.find_relationship_path(handle1, handle2, max_depth)
 
     def search_all_text(self, search_term):
-        """Full-text search across all text fields."""
+        """
+        Full-text search across all text fields.
+
+        :param search_term: Text to search for
+        :type search_term: str
+        :returns: Dictionary of search results by object type
+        :rtype: dict
+        :raises RuntimeError: If enhanced queries not available
+        """
         if not self.enhanced_queries:
             raise RuntimeError(_("Enhanced queries require JSONB support"))
         return self.enhanced_queries.search_all_text(search_term)
 
     def get_statistics(self):
-        """Get detailed database statistics."""
+        """
+        Get detailed database statistics.
+
+        :returns: Dictionary containing database statistics
+        :rtype: dict
+        """
         stats = {
             "backend": "PostgreSQL Enhanced",
             "jsonb_enabled": self._use_jsonb,
@@ -654,6 +791,13 @@ class PostgreSQLEnhanced(DBAPI):
     def _get_metadata(self, key, default="_"):
         """
         Override to handle table prefixes in monolithic mode.
+
+        :param key: Metadata key to retrieve
+        :type key: str
+        :param default: Default value if key not found
+        :type default: object
+        :returns: Metadata value or default
+        :rtype: object
         """
         if hasattr(self, "table_prefix") and self.table_prefix:
             # In monolithic mode, use prefixed table name
@@ -665,29 +809,45 @@ class PostgreSQLEnhanced(DBAPI):
             self.dbapi.execute("SELECT 1 FROM metadata WHERE setting = ?", [key])
         row = self.dbapi.fetchone()
         if row:
+            prefix = (
+                self.table_prefix
+                if hasattr(self, "table_prefix") and self.table_prefix
+                else ""
+            )
             self.dbapi.execute(
-                f"SELECT value FROM {self.table_prefix if hasattr(self, 'table_prefix') and self.table_prefix else ''}metadata WHERE setting = %s",
+                f"SELECT value FROM {prefix}metadata WHERE setting = %s",
                 [key],
             )
             row = self.dbapi.fetchone()
             if row and row[0]:
                 try:
                     return pickle.loads(row[0])
-                except:
+                except (pickle.PickleError, TypeError, ValueError):
                     return row[0]
-        elif default == "_":
+        if default == "_":
             return []
-        else:
-            return default
+        return default
 
     def _set_metadata(self, key, value, use_txn=True):
         """
         Override to handle table prefixes in monolithic mode.
+
+        :param key: Metadata key to set
+        :type key: str
+        :param value: Value to store
+        :type value: object
+        :param use_txn: Whether to use transaction
+        :type use_txn: bool
         """
         if use_txn:
             self._txn_begin()
 
-        table_name = f"{self.table_prefix if hasattr(self, 'table_prefix') and self.table_prefix else ''}metadata"
+        prefix = (
+            self.table_prefix
+            if hasattr(self, "table_prefix") and self.table_prefix
+            else ""
+        )
+        table_name = f"{prefix}metadata"
 
         self.dbapi.execute(f"SELECT 1 FROM {table_name} WHERE setting = %s", [key])
         row = self.dbapi.fetchone()
@@ -705,16 +865,21 @@ class PostgreSQLEnhanced(DBAPI):
             self._txn_commit()
 
 
-#------------------------------------------------------------
+# ------------------------------------------------------------
 #
 # TablePrefixWrapper
 #
-#------------------------------------------------------------
+# ------------------------------------------------------------
 class TablePrefixWrapper:
     """
     Wraps a database connection to automatically add table prefixes in queries.
 
     This allows the standard DBAPI to work with prefixed tables in monolithic mode.
+
+    :param connection: Database connection to wrap
+    :type connection: psycopg.Connection
+    :param table_prefix: Prefix to add to table names
+    :type table_prefix: str
     """
 
     # Tables that should have prefixes
@@ -749,7 +914,7 @@ class TablePrefixWrapper:
 
         # Log for debugging
         if query != modified_query:
-            LOG.debug(f"Query modified: {query} -> {modified_query}")
+            LOG.debug("Query modified: %s -> %s", query, modified_query)
 
         return self._connection.execute(modified_query, params)
 
@@ -761,7 +926,6 @@ class TablePrefixWrapper:
     def _add_table_prefixes(self, query):
         """Add table prefixes to a query."""
         # NO FALLBACK: We must handle ALL query patterns comprehensively
-        import re
 
         modified = query
 
@@ -834,43 +998,70 @@ class TablePrefixWrapper:
         return getattr(self._connection, name)
 
 
-#------------------------------------------------------------
+# ------------------------------------------------------------
 #
 # CursorPrefixWrapper
 #
-#------------------------------------------------------------
+# ------------------------------------------------------------
 class CursorPrefixWrapper:
     """
     Wraps a database cursor to automatically add table prefixes in queries.
+
+    :param cursor: Database cursor to wrap
+    :type cursor: psycopg.Cursor
+    :param table_prefix: Prefix to add to table names
+    :type table_prefix: str
     """
 
     def __init__(self, cursor, table_prefix):
-        """Initialize wrapper with cursor and prefix."""
+        """
+        Initialize wrapper with cursor and prefix.
+
+        :param cursor: Database cursor to wrap
+        :type cursor: psycopg.Cursor
+        :param table_prefix: Prefix to add to table names
+        :type table_prefix: str
+        """
         self._cursor = cursor
         self._prefix = table_prefix
 
     def execute(self, query, params=None):
-        """Execute query with table prefixes added."""
+        """
+        Execute query with table prefixes added.
+
+        :param query: SQL query string
+        :type query: str
+        :param params: Query parameters
+        :type params: list or tuple
+        :returns: Query result
+        :rtype: psycopg.Cursor
+        """
         # Reuse the same prefix logic from TablePrefixWrapper
         modified_query = self._add_table_prefixes(query)
 
         # Log for debugging
         if query != modified_query:
-            LOG.debug(f"Cursor query modified: {query} -> {modified_query}")
+            LOG.debug("Cursor query modified: %s -> %s", query, modified_query)
 
         return self._cursor.execute(modified_query, params)
 
     def _add_table_prefixes(self, query):
-        """Add table prefixes to a query."""
+        """
+        Add table prefixes to a query.
+
+        :param query: SQL query string
+        :type query: str
+        :returns: Query with table names prefixed
+        :rtype: str
+        """
         # NO FALLBACK: We must handle ALL query patterns comprehensively
-        import re
 
         modified = query
 
         # Use same tables as TablePrefixWrapper
-        PREFIXED_TABLES = TablePrefixWrapper.PREFIXED_TABLES
+        prefixed_tables = TablePrefixWrapper.PREFIXED_TABLES
 
-        for table in PREFIXED_TABLES:
+        for table in prefixed_tables:
             # Match table name as whole word (not part of another word)
             # Handle ALL SQL patterns that DBAPI might generate
             patterns = [
@@ -935,14 +1126,35 @@ class CursorPrefixWrapper:
         return modified
 
     def __enter__(self):
-        """Support context manager protocol."""
+        """
+        Support context manager protocol.
+
+        :returns: Self for use in with statement
+        :rtype: CursorPrefixWrapper
+        """
         self._cursor.__enter__()
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
-        """Support context manager protocol."""
+        """
+        Support context manager protocol.
+
+        :param exc_type: Exception type if any
+        :type exc_type: type
+        :param exc_val: Exception value if any
+        :type exc_val: Exception
+        :param exc_tb: Exception traceback if any
+        :type exc_tb: traceback
+        """
         return self._cursor.__exit__(exc_type, exc_val, exc_tb)
 
     def __getattr__(self, name):
-        """Forward all other attributes to the wrapped cursor."""
+        """
+        Forward all other attributes to the wrapped cursor.
+
+        :param name: Attribute name
+        :type name: str
+        :returns: Attribute value from wrapped cursor
+        :rtype: object
+        """
         return getattr(self._cursor, name)

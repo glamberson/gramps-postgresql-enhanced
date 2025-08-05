@@ -45,6 +45,7 @@ except ValueError:
     _trans = glocale.translation
 _ = _trans.gettext
 
+
 # -------------------------------------------------------------------------
 #
 # EnhancedQueries class
@@ -53,26 +54,26 @@ _ = _trans.gettext
 class EnhancedQueries:
     """
     Advanced query implementations using PostgreSQL features.
-    
+
     These queries leverage JSONB, recursive CTEs, and other
     PostgreSQL features for complex genealogical analysis.
     """
-    
+
     def __init__(self, connection):
         """
         Initialize enhanced queries.
-        
+
         :param connection: PostgreSQLConnection instance
         """
         self.conn = connection
         self.log = logging.getLogger(".PostgreSQLEnhanced.Queries")
-    
+
     def find_common_ancestors(self, handle1, handle2, max_generations=20):
         """
         Find common ancestors between two people.
-        
+
         Uses recursive CTEs to traverse ancestry efficiently.
-        
+
         :param handle1: First person's handle
         :param handle2: Second person's handle
         :param max_generations: Maximum generations to search
@@ -131,16 +132,16 @@ class EnhancedQueries:
         JOIN person p ON p.handle = a1.handle
         ORDER BY a1.generation + a2.generation, a1.handle
         """
-        
+
         self.conn.execute(query, [handle1, max_generations, handle2, max_generations])
         return self.conn.fetchall()
-    
+
     def find_relationship_path(self, handle1, handle2, max_depth=15):
         """
         Find the shortest relationship path between two people.
-        
+
         Uses bidirectional search with PostgreSQL graph traversal.
-        
+
         :param handle1: Start person's handle
         :param handle2: End person's handle
         :param max_depth: Maximum relationship depth to search
@@ -148,7 +149,7 @@ class EnhancedQueries:
         """
         # This is a simplified version - a full implementation would
         # use more sophisticated graph algorithms
-        
+
         query = """
         WITH RECURSIVE relationship_graph AS (
             -- Start from person 1
@@ -200,28 +201,28 @@ class EnhancedQueries:
         ORDER BY depth
         LIMIT 1
         """
-        
+
         self.conn.execute(query, [handle1, handle2, handle2, max_depth])
         result = self.conn.fetchone()
         return result[0] if result else None
-    
+
     def search_all_text(self, search_term, limit=100):
         """
         Full-text search across all text fields in the database.
-        
+
         Searches in:
         - Person names and attributes
         - Event descriptions
         - Place names
         - Source titles and text
         - All notes
-        
+
         :param search_term: Text to search for
         :param limit: Maximum results to return
         :return: List of (object_type, handle, context) tuples
         """
         results = []
-        
+
         # Search in person names
         query = """
         SELECT 'person' as obj_type, handle, 
@@ -231,10 +232,10 @@ class EnhancedQueries:
         WHERE json_data::text ILIKE %s
         LIMIT %s
         """
-        search_pattern = f'%{search_term}%'
+        search_pattern = f"%{search_term}%"
         self.conn.execute(query, [search_pattern, limit])
         results.extend(self.conn.fetchall())
-        
+
         # Search in notes
         query = """
         SELECT 'note' as obj_type, handle,
@@ -246,7 +247,7 @@ class EnhancedQueries:
         """
         self.conn.execute(query, [search_pattern, limit - len(results)])
         results.extend(self.conn.fetchall())
-        
+
         # Search in events
         query = """
         SELECT 'event' as obj_type, handle,
@@ -258,20 +259,20 @@ class EnhancedQueries:
         """
         self.conn.execute(query, [search_pattern, limit - len(results)])
         results.extend(self.conn.fetchall())
-        
+
         return results[:limit]
-    
+
     def get_descendants_tree(self, person_handle, max_depth=None):
         """
         Get complete descendants tree for a person.
-        
+
         :param person_handle: Root person's handle
         :param max_depth: Maximum generations to retrieve
         :return: Hierarchical structure of descendants
         """
         if max_depth is None:
             max_depth = 99
-        
+
         query = """
         WITH RECURSIVE descendants AS (
             -- Root person
@@ -310,47 +311,49 @@ class EnhancedQueries:
         FROM descendants
         ORDER BY generation, path
         """
-        
+
         self.conn.execute(query, [person_handle, max_depth])
-        
+
         # Build tree structure
-        tree = {'handle': person_handle, 'children': []}
+        tree = {"handle": person_handle, "children": []}
         nodes = {person_handle: tree}
-        
+
         for row in self.conn.fetchall():
             if row[0] != person_handle:  # Skip root
                 parent_handle = row[2][-2] if len(row[2]) > 1 else person_handle
                 node = {
-                    'handle': row[0],
-                    'gramps_id': row[3],
-                    'name': f"{row[4] or ''} {row[5] or ''}".strip(),
-                    'birth_date': row[6],
-                    'death_date': row[7],
-                    'generation': row[1],
-                    'children': []
+                    "handle": row[0],
+                    "gramps_id": row[3],
+                    "name": f"{row[4] or ''} {row[5] or ''}".strip(),
+                    "birth_date": row[6],
+                    "death_date": row[7],
+                    "generation": row[1],
+                    "children": [],
                 }
                 nodes[row[0]] = node
                 if parent_handle in nodes:
-                    nodes[parent_handle]['children'].append(node)
-        
+                    nodes[parent_handle]["children"].append(node)
+
         return tree
-    
+
     def find_potential_duplicates(self, threshold=0.8):
         """
         Find potential duplicate persons using name similarity.
-        
+
         Requires pg_trgm extension for trigram similarity.
-        
+
         :param threshold: Similarity threshold (0.0 to 1.0)
         :return: List of potential duplicate pairs
         """
         # Check if pg_trgm is available
-        self.conn.execute("""
+        self.conn.execute(
+            """
             SELECT COUNT(*) FROM pg_extension WHERE extname = 'pg_trgm'
-        """)
+        """
+        )
         if self.conn.fetchone()[0] == 0:
             raise RuntimeError(_("pg_trgm extension required for duplicate detection"))
-        
+
         query = """
         SELECT 
             p1.handle as handle1,
@@ -377,38 +380,50 @@ class EnhancedQueries:
         ) > %s
         ORDER BY name_similarity DESC
         """
-        
+
         self.conn.execute(query, [threshold])
         return self.conn.fetchall()
-    
+
     def get_statistics(self):
         """
         Get detailed database statistics.
-        
+
         :return: Dictionary of statistics
         """
         stats = {}
-        
+
         # Basic counts
-        for obj_type in ['person', 'family', 'event', 'place', 
-                        'source', 'citation', 'media', 'repository', 
-                        'note', 'tag']:
+        for obj_type in [
+            "person",
+            "family",
+            "event",
+            "place",
+            "source",
+            "citation",
+            "media",
+            "repository",
+            "note",
+            "tag",
+        ]:
             self.conn.execute(f"SELECT COUNT(*) FROM {obj_type}")
-            stats[f'{obj_type}_count'] = self.conn.fetchone()[0]
-        
+            stats[f"{obj_type}_count"] = self.conn.fetchone()[0]
+
         # Gender distribution
-        self.conn.execute("""
+        self.conn.execute(
+            """
             SELECT 
                 json_data->>'gender' as gender,
                 COUNT(*) as count
             FROM person
             WHERE json_data->>'gender' IS NOT NULL
             GROUP BY json_data->>'gender'
-        """)
-        stats['gender_distribution'] = dict(self.conn.fetchall())
-        
+        """
+        )
+        stats["gender_distribution"] = dict(self.conn.fetchall())
+
         # Century distribution
-        self.conn.execute("""
+        self.conn.execute(
+            """
             SELECT 
                 SUBSTRING(json_data->'birth_ref_index'->>'date', 1, 2) || '00' as century,
                 COUNT(*) as count
@@ -416,11 +431,13 @@ class EnhancedQueries:
             WHERE json_data->'birth_ref_index'->>'date' ~ '^\\d{4}'
             GROUP BY century
             ORDER BY century
-        """)
-        stats['birth_centuries'] = dict(self.conn.fetchall())
-        
+        """
+        )
+        stats["birth_centuries"] = dict(self.conn.fetchall())
+
         # Most common surnames
-        self.conn.execute("""
+        self.conn.execute(
+            """
             SELECT 
                 json_data->'names'->0->>'surname' as surname,
                 COUNT(*) as count
@@ -429,17 +446,20 @@ class EnhancedQueries:
             GROUP BY surname
             ORDER BY count DESC
             LIMIT 10
-        """)
-        stats['top_surnames'] = self.conn.fetchall()
-        
+        """
+        )
+        stats["top_surnames"] = self.conn.fetchall()
+
         # Average family size
-        self.conn.execute("""
+        self.conn.execute(
+            """
             SELECT 
                 AVG(jsonb_array_length(json_data->'child_ref_list')) as avg_children
             FROM family
             WHERE json_data->'child_ref_list' IS NOT NULL
-        """)
+        """
+        )
         result = self.conn.fetchone()
-        stats['avg_children_per_family'] = float(result[0]) if result[0] else 0
-        
+        stats["avg_children_per_family"] = float(result[0]) if result[0] else 0
+
         return stats
