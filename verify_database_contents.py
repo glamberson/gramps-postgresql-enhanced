@@ -312,6 +312,7 @@ def verify_query_patterns():
 
     import sys
     import os
+
     sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
     import mock_gramps
     from postgresqlenhanced import TablePrefixWrapper, CursorPrefixWrapper

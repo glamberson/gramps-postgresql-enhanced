@@ -28,8 +28,8 @@ import logging
 import pickle
 import sys
 import os
-from psycopg.types.json import Jsonb
 from psycopg import sql
+from psycopg.types.json import Jsonb
 
 # Add plugin directory to path for imports
 plugin_dir = os.path.dirname(__file__)
@@ -118,7 +118,8 @@ class PostgreSQLSchema:
         if not self.conn.table_exists(self._table_name("metadata")):
             # First time setup - create all tables
             self.log.info(
-                f"Creating new PostgreSQL Enhanced schema{' with prefix: ' + self.table_prefix if self.table_prefix else ''}"
+                "Creating new PostgreSQL Enhanced schema%s",
+                " with prefix: " + self.table_prefix if self.table_prefix else "",
             )
             self._create_schema()
         else:
@@ -126,7 +127,7 @@ class PostgreSQLSchema:
             current_version = self._get_schema_version()
             if current_version < SCHEMA_VERSION:
                 self.log.info(
-                    f"Upgrading schema from v{current_version} to v{SCHEMA_VERSION}"
+                    "Upgrading schema from v%s to v%s", current_version, SCHEMA_VERSION
                 )
                 self._upgrade_schema(current_version)
 
@@ -403,7 +404,7 @@ class PostgreSQLSchema:
                     """
                     )
             except Exception as e:
-                self.log.debug(f"Could not create trigram index on notes: {e}")
+                self.log.debug("Could not create trigram index on notes: %s", e)
 
     def _create_enhanced_features(self):
         """Create PostgreSQL-specific enhanced features."""
@@ -466,9 +467,9 @@ class PostgreSQLSchema:
             if self._check_extension_available(ext_name):
                 try:
                     self.conn.execute(f"CREATE EXTENSION IF NOT EXISTS {ext_name}")
-                    self.log.info(f"Enabled {ext_name} extension: {description}")
+                    self.log.info("Enabled %s extension: %s", ext_name, description)
                 except Exception as e:
-                    self.log.debug(f"Could not enable {ext_name}: {e}")
+                    self.log.debug("Could not enable %s: %s", ext_name, e)
 
     def _check_extension_available(self, extension_name):
         """Check if a PostgreSQL extension is available."""

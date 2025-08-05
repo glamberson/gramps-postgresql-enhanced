@@ -90,6 +90,7 @@ from schema import PostgreSQLSchema
 from migration import MigrationManager
 from queries import EnhancedQueries
 from schema_columns import REQUIRED_COLUMNS
+
 # pylint: enable=wrong-import-position
 
 # -------------------------------------------------------------------------
@@ -303,7 +304,8 @@ class PostgreSQLEnhanced(DBAPI):
         :type password: str
         :raises DbConnectionError: If configuration cannot be loaded or connection fails
         """
-        # Check if this is a Gramps file-based path (like /home/user/.local/share/gramps/grampsdb/xxx)
+        # Check if this is a Gramps file-based path
+        # (like /home/user/.local/share/gramps/grampsdb/xxx)
         # or a test directory with connection_info.txt
         config_file = (
             os.path.join(directory, "connection_info.txt") if directory else None
@@ -584,7 +586,8 @@ class PostgreSQLEnhanced(DBAPI):
             LOG.error(
                 "User '%s' lacks CREATE DATABASE privilege. "
                 "Please create database '%s' manually or grant CREATEDB privilege.",
-                config['user'], db_name
+                config["user"],
+                db_name,
             )
             raise
         except Exception as e:
