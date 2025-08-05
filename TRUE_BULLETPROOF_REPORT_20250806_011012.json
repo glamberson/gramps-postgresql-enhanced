@@ -1,0 +1,70 @@
+{
+  "total_tests": 6,
+  "passed": 0,
+  "failed": 6,
+  "critical_failures": [
+    {
+      "test": "Person Data Integrity",
+      "error": "'MockName' object has no attribute 'set_suffix'",
+      "traceback": "Traceback (most recent call last):\n  File \"/home/greg/gramps-postgresql-enhanced/test_true_bulletproof_data_integrity.py\", line 206, in test_person_data_integrity\n    name.set_suffix(\"Jr.\")\n    ^^^^^^^^^^^^^^^\nAttributeError: 'MockName' object has no attribute 'set_suffix'\n"
+    },
+    {
+      "test": "Family Relationship Integrity",
+      "error": "'MockChildRef' object has no attribute 'set_father_relation'",
+      "traceback": "Traceback (most recent call last):\n  File \"/home/greg/gramps-postgresql-enhanced/test_true_bulletproof_data_integrity.py\", line 481, in test_family_relationship_integrity\n    child_ref.set_father_relation(ChildRef.BIRTH)\n    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nAttributeError: 'MockChildRef' object has no attribute 'set_father_relation'\n"
+    },
+    {
+      "test": "Concurrent Access Safety",
+      "error": "Type is not JSON serializable: MockPerson",
+      "traceback": "Traceback (most recent call last):\n  File \"/usr/lib/python3/dist-packages/gramps/gen/lib/json_utils.py\", line 147, in convert_object_to_state\n    return obj.get_object_state()\n           ^^^^^^^^^^^^^^^^^^^^\nAttributeError: 'MockPerson' object has no attribute 'get_object_state'\n\nThe above exception was the direct cause of the following exception:\n\nTraceback (most recent call last):\n  File \"/home/greg/gramps-postgresql-enhanced/test_true_bulletproof_data_integrity.py\", line 648, in test_concurrent_access\n    self.db.add_person(person, trans)\n    ~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^\n  File \"/usr/lib/python3/dist-packages/gramps/gen/db/generic.py\", line 1949, in add_person\n    return self._add_base(\n           ~~~~~~~~~~~~~~^\n        person,\n        ^^^^^^^\n    ...<3 lines>...\n        self.commit_person,\n        ^^^^^^^^^^^^^^^^^^^\n    )\n    ^\n  File \"/usr/lib/python3/dist-packages/gramps/gen/db/generic.py\", line 1945, in _add_base\n    commit_func(obj, trans)\n    ~~~~~~~~~~~^^^^^^^^^^^^\n  File \"/usr/lib/python3/dist-packages/gramps/gen/db/generic.py\", line 2049, in commit_person\n    old_data = self._commit_base(person, PERSON_KEY, transaction, change_time)\n  File \"/usr/lib/python3/dist-packages/gramps/plugins/db/dbapi/dbapi.py\", line 694, in _commit_base\n    [obj.handle, self.serializer.object_to_string(obj)],\n                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^\n  File \"/usr/lib/python3/dist-packages/gramps/gen/lib/serialize.py\", line 143, in object_to_string\n    return object_to_string(obj)\n  File \"/usr/lib/python3/dist-packages/gramps/gen/lib/json_utils.py\", line 225, in object_to_string\n    return orjson.dumps(obj, default=convert_object_to_state).decode()\n           ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nTypeError: Type is not JSON serializable: MockPerson\n"
+    },
+    {
+      "test": "Transaction Rollback Safety",
+      "error": "Type is not JSON serializable: MockPerson",
+      "traceback": "Traceback (most recent call last):\n  File \"/usr/lib/python3/dist-packages/gramps/gen/lib/json_utils.py\", line 147, in convert_object_to_state\n    return obj.get_object_state()\n           ^^^^^^^^^^^^^^^^^^^^\nAttributeError: 'MockPerson' object has no attribute 'get_object_state'\n\nThe above exception was the direct cause of the following exception:\n\nTraceback (most recent call last):\n  File \"/home/greg/gramps-postgresql-enhanced/test_true_bulletproof_data_integrity.py\", line 741, in test_transaction_rollback\n    self.db.add_person(person1, trans)\n    ~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^\n  File \"/usr/lib/python3/dist-packages/gramps/gen/db/generic.py\", line 1949, in add_person\n    return self._add_base(\n           ~~~~~~~~~~~~~~^\n        person,\n        ^^^^^^^\n    ...<3 lines>...\n        self.commit_person,\n        ^^^^^^^^^^^^^^^^^^^\n    )\n    ^\n  File \"/usr/lib/python3/dist-packages/gramps/gen/db/generic.py\", line 1945, in _add_base\n    commit_func(obj, trans)\n    ~~~~~~~~~~~^^^^^^^^^^^^\n  File \"/usr/lib/python3/dist-packages/gramps/gen/db/generic.py\", line 2049, in commit_person\n    old_data = self._commit_base(person, PERSON_KEY, transaction, change_time)\n  File \"/usr/lib/python3/dist-packages/gramps/plugins/db/dbapi/dbapi.py\", line 694, in _commit_base\n    [obj.handle, self.serializer.object_to_string(obj)],\n                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^\n  File \"/usr/lib/python3/dist-packages/gramps/gen/lib/serialize.py\", line 143, in object_to_string\n    return object_to_string(obj)\n  File \"/usr/lib/python3/dist-packages/gramps/gen/lib/json_utils.py\", line 225, in object_to_string\n    return orjson.dumps(obj, default=convert_object_to_state).decode()\n           ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nTypeError: Type is not JSON serializable: MockPerson\n"
+    },
+    {
+      "test": "Large Dataset Performance",
+      "error": "Type is not JSON serializable: MockPerson",
+      "traceback": "Traceback (most recent call last):\n  File \"/usr/lib/python3/dist-packages/gramps/gen/lib/json_utils.py\", line 147, in convert_object_to_state\n    return obj.get_object_state()\n           ^^^^^^^^^^^^^^^^^^^^\nAttributeError: 'MockPerson' object has no attribute 'get_object_state'\n\nThe above exception was the direct cause of the following exception:\n\nTraceback (most recent call last):\n  File \"/home/greg/gramps-postgresql-enhanced/test_true_bulletproof_data_integrity.py\", line 842, in test_large_dataset_performance\n    self.db.add_person(person, trans)\n    ~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^\n  File \"/usr/lib/python3/dist-packages/gramps/gen/db/generic.py\", line 1949, in add_person\n    return self._add_base(\n           ~~~~~~~~~~~~~~^\n        person,\n        ^^^^^^^\n    ...<3 lines>...\n        self.commit_person,\n        ^^^^^^^^^^^^^^^^^^^\n    )\n    ^\n  File \"/usr/lib/python3/dist-packages/gramps/gen/db/generic.py\", line 1945, in _add_base\n    commit_func(obj, trans)\n    ~~~~~~~~~~~^^^^^^^^^^^^\n  File \"/usr/lib/python3/dist-packages/gramps/gen/db/generic.py\", line 2049, in commit_person\n    old_data = self._commit_base(person, PERSON_KEY, transaction, change_time)\n  File \"/usr/lib/python3/dist-packages/gramps/plugins/db/dbapi/dbapi.py\", line 694, in _commit_base\n    [obj.handle, self.serializer.object_to_string(obj)],\n                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^\n  File \"/usr/lib/python3/dist-packages/gramps/gen/lib/serialize.py\", line 143, in object_to_string\n    return object_to_string(obj)\n  File \"/usr/lib/python3/dist-packages/gramps/gen/lib/json_utils.py\", line 225, in object_to_string\n    return orjson.dumps(obj, default=convert_object_to_state).decode()\n           ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nTypeError: Type is not JSON serializable: MockPerson\n"
+    },
+    {
+      "test": "Edge Cases and Boundary Conditions",
+      "failed_cases": [
+        "Empty values",
+        "Maximum length",
+        "SQL injection / XSS protection",
+        "Circular references",
+        "Null bytes/control chars"
+      ],
+      "details": [
+        [
+          "Empty values",
+          false,
+          "Type is not JSON serializable: MockPerson"
+        ],
+        [
+          "Maximum length",
+          false,
+          "'MockNote' object has no attribute 'set_text'"
+        ],
+        [
+          "SQL injection / XSS protection",
+          false,
+          "Type is not JSON serializable: MockPerson"
+        ],
+        [
+          "Circular references",
+          false,
+          "Type is not JSON serializable: MockPerson"
+        ],
+        [
+          "Null bytes/control chars",
+          false,
+          "Type is not JSON serializable: MockPerson"
+        ]
+      ]
+    }
+  ],
+  "test_details": {}
+}

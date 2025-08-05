@@ -1,0 +1,24 @@
+{
+  "total_tests": 3,
+  "passed": 0,
+  "failed": 3,
+  "critical_failures": [
+    {
+      "test": "Person Complete Data Integrity",
+      "error": "'Name' object has no attribute 'set_nick'",
+      "traceback": "Traceback (most recent call last):\n  File \"/home/greg/gramps-postgresql-enhanced/test_real_gramps_data_integrity.py\", line 139, in test_person_complete_data_integrity\n    name.set_nick(\"Benny\")\n    ^^^^^^^^^^^^^\nAttributeError: 'Name' object has no attribute 'set_nick'\n"
+    },
+    {
+      "test": "Complex Family Relationships",
+      "error": "type object 'ChildRef' has no attribute 'BIRTH'",
+      "traceback": "Traceback (most recent call last):\n  File \"/home/greg/gramps-postgresql-enhanced/test_real_gramps_data_integrity.py\", line 698, in test_complex_family_relationships\n    child_ref.set_father_relation(ChildRef.BIRTH)\n                                  ^^^^^^^^^^^^^^\nAttributeError: type object 'ChildRef' has no attribute 'BIRTH'\n"
+    },
+    {
+      "test": "Large Dataset Stress Test",
+      "failures": [
+        "Data corruption in 50 records"
+      ]
+    }
+  ],
+  "test_details": {}
+}

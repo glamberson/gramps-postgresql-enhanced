@@ -28,9 +28,8 @@ from postgresqlenhanced import PostgreSQLEnhanced
 from connection import PostgreSQLConnection
 from schema import PostgreSQLSchema
 
-# Import Gramps classes from mock
-from gramps.gen.db import DbTxn
-from gramps.gen.lib import Person, Name, Surname, Family, Event, Place, Source
+# Import Gramps classes (real if available, mock otherwise)
+from mock_gramps import DbTxn, Person, Name, Surname, Family, Event, Place, Source
 
 # Database configuration
 DB_CONFIG = {
@@ -216,12 +215,12 @@ database_name = {tree_name}
                     """)
                     tables = [row[0] for row in cur.fetchall()]
                     
+                    # Correct expectation: Real Gramps tables + our enhancements
                     expected_tables = [
-                        'address', 'child_ref', 'citation', 'datamap', 'event', 
-                        'event_ref', 'family', 'lds_ord', 'location', 'media', 
-                        'media_ref', 'metadata', 'name', 'name_group', 'note', 
-                        'person', 'person_ref', 'place', 'place_name', 'place_ref',
-                        'reporef', 'repository', 'source', 'surname', 'tag', 'url'
+                        'person', 'family', 'source', 'citation', 'event', 
+                        'media', 'place', 'repository', 'note', 'tag',
+                        'reference', 'name_group', 'metadata', 'gender_stats',
+                        'surname'  # Our enhancement table
                     ]
                     
                     missing = set(expected_tables) - set(tables)

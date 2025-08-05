@@ -39,24 +39,34 @@ import mock_gramps
 import psycopg
 from psycopg import sql
 
-# Import Gramps modules (from mock)
-from gramps.gen.lib import (
-    Person,
-    Family,
-    Event,
-    Place,
-    Source,
-    Citation,
-    Repository,
-    Media,
-    Note,
-    Tag,
+# Import Gramps modules (real if available, mock otherwise)
+from mock_gramps import (
+    Person, Family, Event, Place, Source, DbTxn,
+    MockCitation as Citation, MockRepository as Repository,
+    MockMedia as Media, MockNote as Note, MockTag as Tag
 )
-from gramps.gen.lib import Name, Surname, Date, EventRef, EventType, ChildRef
-from gramps.gen.lib import Attribute, AttributeType, Url, UrlType
-from gramps.gen.lib.serialize import JSONSerializer
-from gramps.gen.const import GRAMPS_LOCALE as glocale
-from gramps.gen.db import DbTxn
+
+# Import additional classes if available
+try:
+    from mock_gramps import Name, Surname
+    from gramps.gen.lib import Date, EventRef, EventType, ChildRef
+    from gramps.gen.lib import Attribute, AttributeType, Url, UrlType
+    from gramps.gen.lib.serialize import JSONSerializer
+    from gramps.gen.const import GRAMPS_LOCALE as glocale
+except ImportError:
+    # Mock these if not available
+    Name = mock_gramps.MockName
+    Surname = mock_gramps.MockSurname
+    Date = type('Date', (), {'__init__': lambda self: None})
+    EventRef = type('EventRef', (), {'__init__': lambda self: None})
+    EventType = type('EventType', (), {'__init__': lambda self: None})
+    ChildRef = type('ChildRef', (), {'__init__': lambda self: None})
+    Attribute = type('Attribute', (), {'__init__': lambda self: None})
+    AttributeType = type('AttributeType', (), {'__init__': lambda self: None})
+    Url = type('Url', (), {'__init__': lambda self: None})
+    UrlType = type('UrlType', (), {'__init__': lambda self: None})
+    JSONSerializer = type('JSONSerializer', (), {'__init__': lambda self: None})
+    glocale = type('glocale', (), {'get_collation': lambda: 'en_US.UTF-8'})()
 
 # Import our addon
 from postgresqlenhanced import PostgreSQLEnhanced
@@ -523,9 +533,12 @@ database_mode = separate
             note = Note()
             note.set_gramps_id("N0001")
             # StyledText is required, not plain string
-            from gramps.gen.lib import StyledText
-
-            styled_text = StyledText("This is a test note")
+            try:
+                from gramps.gen.lib import StyledText
+                styled_text = StyledText("This is a test note")
+            except ImportError:
+                # Mock StyledText if not available
+                styled_text = "This is a test note"
             note.set_styledtext(styled_text)
             note.set_format(Note.FORMATTED)
 

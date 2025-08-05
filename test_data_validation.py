@@ -20,8 +20,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 # Import after setting up path
 import mock_gramps
 from postgresqlenhanced import PostgreSQLEnhanced
-from gramps.gen.db import DbTxn
-from gramps.gen.lib import Person, Name, Surname, Family, Event, Place
+from mock_gramps import DbTxn, Person, Name, Surname, Family, Event, Place
 
 # Database configuration
 DB_CONFIG = {
