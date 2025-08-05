@@ -1,3 +1,23 @@
+#
+# Gramps - a GTK+/GNOME based genealogy program
+#
+# Copyright (C) 2025       Greg Lamberson
+#
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 2 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write to the Free Software
+# Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
+#
+
 """Mock Gramps modules for testing without full Gramps installation."""
 
 import sys
@@ -19,7 +39,11 @@ sys.modules["gramps.plugins.db.dbapi.dbapi"] = MagicMock()
 sys.modules["gramps.gen.db.generic"] = MagicMock()
 
 
-# Mock specific classes and functions
+# -------------------------------------------------------------------------
+#
+# MockDBAPI
+#
+# -------------------------------------------------------------------------
 class MockDBAPI:
     def __init__(self):
         self.undolog = None
@@ -73,6 +97,9 @@ class MockDBAPI:
         self.iter_event_handles = MagicMock(return_value=iter([]))
         self.iter_place_handles = MagicMock(return_value=iter([]))
         self.iter_source_handles = MagicMock(return_value=iter([]))
+        # Add iterator methods for people
+        self.iter_people = MagicMock(return_value=iter([]))
+
 
         # Add get by gramps_id methods
         self.get_person_from_gramps_id = MagicMock()
@@ -85,6 +112,11 @@ class MockDBAPI:
 sys.modules["gramps.plugins.db.dbapi.dbapi"].DBAPI = MockDBAPI
 
 
+# -------------------------------------------------------------------------
+#
+# MockDbConnectionError
+#
+# -------------------------------------------------------------------------
 class MockDbConnectionError(Exception):
     pass
 
@@ -92,6 +124,11 @@ class MockDbConnectionError(Exception):
 sys.modules["gramps.gen.db.exceptions"].DbConnectionError = MockDbConnectionError
 
 
+# -------------------------------------------------------------------------
+#
+# MockJSONSerializer
+#
+# -------------------------------------------------------------------------
 class MockJSONSerializer:
     def object_to_data(self, obj):
         return {}
@@ -100,6 +137,11 @@ class MockJSONSerializer:
 sys.modules["gramps.gen.lib.serialize"].JSONSerializer = MockJSONSerializer
 
 
+# -------------------------------------------------------------------------
+#
+# MockDbGenericUndo
+#
+# -------------------------------------------------------------------------
 class MockDbGenericUndo:
     def __init__(self, db, log):
         pass
@@ -111,7 +153,11 @@ class MockDbGenericUndo:
 sys.modules["gramps.gen.db.generic"].DbGenericUndo = MockDbGenericUndo
 
 
-# Mock locale
+# -------------------------------------------------------------------------
+#
+# MockLocale
+#
+# -------------------------------------------------------------------------
 class MockLocale:
     def get_addon_translator(self, file):
         return self
@@ -134,7 +180,11 @@ import builtins
 builtins._ = lambda x: x
 
 
-# Add gender constants
+# -------------------------------------------------------------------------
+#
+# PersonGender
+#
+# -------------------------------------------------------------------------
 class PersonGender:
     UNKNOWN = 0
     MALE = 1
@@ -142,7 +192,11 @@ class PersonGender:
     OTHER = 3
 
 
-# Mock Gramps data classes with full functionality
+# -------------------------------------------------------------------------
+#
+# MockPerson
+#
+# -------------------------------------------------------------------------
 class MockPerson:
     # Gender constants
     UNKNOWN = 0
@@ -176,8 +230,21 @@ class MockPerson:
 
     def get_gender(self):
         return self.gender
+    def add_url(self, url):
+        """Add URL to person."""
+        pass
+    
+    def add_event_ref(self, event_ref):
+        """Add event reference."""
+        pass
 
 
+
+# -------------------------------------------------------------------------
+#
+# MockName
+#
+# -------------------------------------------------------------------------
 class MockName:
     def __init__(self):
         self.first_name = ""
@@ -188,16 +255,35 @@ class MockName:
 
     def add_surname(self, surname):
         self.surname_list.append(surname)
+    def get_first_name(self):
+        return self.first_name
+    
+    def get_surname_list(self):
+        return self.surname_list
 
 
+
+# -------------------------------------------------------------------------
+#
+# MockSurname
+#
+# -------------------------------------------------------------------------
 class MockSurname:
     def __init__(self):
         self.surname = ""
 
     def set_surname(self, surname):
         self.surname = surname
+    def get_surname(self):
+        return self.surname
 
 
+
+# -------------------------------------------------------------------------
+#
+# MockFamily
+#
+# -------------------------------------------------------------------------
 class MockFamily:
     def __init__(self):
         self.handle = None
@@ -220,9 +306,34 @@ class MockFamily:
 
     def add_child_ref(self, ref):
         self.child_ref_list.append(ref)
+    def get_handle(self):
+        return self.handle
+    
+    def get_father_handle(self):
+        return self.father_handle
+    
+    def get_mother_handle(self):
+        return self.mother_handle
+    
+    def get_child_ref_list(self):
+        return self.child_ref_list
+    
+    def add_event_ref(self, event_ref):
+        pass
 
 
+
+# -------------------------------------------------------------------------
+#
+# MockEvent
+#
+# -------------------------------------------------------------------------
 class MockEvent:
+    # Event type constants
+    BIRTH = 1
+    DEATH = 2
+    MARRIAGE = 3
+    
     def __init__(self):
         self.handle = None
         self.gramps_id = None
@@ -247,8 +358,22 @@ class MockEvent:
 
     def get_description(self):
         return self.description
+    def get_handle(self):
+        return self.handle
+    
+    def set_place_handle(self, handle):
+        self.place_handle = handle
+    
+    def get_place_handle(self):
+        return getattr(self, 'place_handle', None)
 
 
+
+# -------------------------------------------------------------------------
+#
+# MockPlace
+#
+# -------------------------------------------------------------------------
 class MockPlace:
     def __init__(self):
         self.handle = None
@@ -270,8 +395,16 @@ class MockPlace:
 
     def get_code(self):
         return self.code
+    def set_name(self, name):
+        self.name = name
 
 
+
+# -------------------------------------------------------------------------
+#
+# MockSource
+#
+# -------------------------------------------------------------------------
 class MockSource:
     def __init__(self):
         self.handle = None
@@ -293,8 +426,16 @@ class MockSource:
 
     def get_author(self):
         return self.author
+    def set_publication_info(self, info):
+        self.pubinfo = info
 
 
+
+# -------------------------------------------------------------------------
+#
+# MockDbTxn
+#
+# -------------------------------------------------------------------------
 class MockDbTxn:
     def __init__(self, msg, db):
         self.msg = msg
@@ -317,13 +458,22 @@ sys.modules["gramps.gen.lib"].Source = MockSource
 sys.modules["gramps.gen.db"].DbTxn = MockDbTxn
 
 
-# Add more mock classes that tests might need
+# -------------------------------------------------------------------------
+#
+# MockCitation
+#
+# -------------------------------------------------------------------------
 class MockCitation:
     def __init__(self):
         self.handle = None
         self.gramps_id = None
 
 
+# -------------------------------------------------------------------------
+#
+# MockRepository
+#
+# -------------------------------------------------------------------------
 class MockRepository:
     def __init__(self):
         self.handle = None
@@ -334,8 +484,16 @@ class MockRepository:
 
     def set_gramps_id(self, gramps_id):
         self.gramps_id = gramps_id
+    def set_name(self, name):
+        self.name = name
 
 
+
+# -------------------------------------------------------------------------
+#
+# MockMedia
+#
+# -------------------------------------------------------------------------
 class MockMedia:
     def __init__(self):
         self.handle = None
@@ -346,8 +504,16 @@ class MockMedia:
 
     def set_gramps_id(self, gramps_id):
         self.gramps_id = gramps_id
+    def set_path(self, path):
+        self.path = path
 
 
+
+# -------------------------------------------------------------------------
+#
+# MockNote
+#
+# -------------------------------------------------------------------------
 class MockNote:
     def __init__(self):
         self.handle = None
@@ -358,8 +524,16 @@ class MockNote:
 
     def set_gramps_id(self, gramps_id):
         self.gramps_id = gramps_id
+    def set_styledtext(self, text):
+        self.text = text
 
 
+
+# -------------------------------------------------------------------------
+#
+# MockTag
+#
+# -------------------------------------------------------------------------
 class MockTag:
     def __init__(self):
         self.handle = None
@@ -373,9 +547,16 @@ class MockTag:
 
     def get_name(self):
         return self.name
+    def set_color(self, color):
+        self.color = color
 
 
-# Add event types
+
+# -------------------------------------------------------------------------
+#
+# MockEventType
+#
+# -------------------------------------------------------------------------
 class MockEventType:
     BIRTH = 1
     DEATH = 2
@@ -385,10 +566,17 @@ class MockEventType:
         self.value = value
 
 
-# Add child reference
+# -------------------------------------------------------------------------
+#
+# MockChildRef
+#
+# -------------------------------------------------------------------------
 class MockChildRef:
     def __init__(self):
         self.ref = None
+    def set_reference_handle(self, handle):
+        self.ref = handle
+
 
 
 sys.modules["gramps.gen.lib"].Citation = MockCitation

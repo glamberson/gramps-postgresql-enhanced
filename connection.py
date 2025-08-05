@@ -370,7 +370,7 @@ class PostgreSQLConnection:
             self.log.debug("Args: %s", pg_args)
 
         # Get a persistent cursor for DBAPI compatibility
-        if not hasattr(self, "_persistent_cursor") or self._persistent_cursor.closed:
+        if not hasattr(self, "_persistent_cursor") or self._persistent_cursor is None or self._persistent_cursor.closed:
             if self._pool:
                 # For pools, get a connection from the pool
                 self._persistent_conn = self._pool.getconn()
@@ -538,7 +538,7 @@ class PostgreSQLConnection:
     def cursor(self):
         """Return a cursor object."""
         # Return the persistent cursor to maintain compatibility
-        if not hasattr(self, "_persistent_cursor") or self._persistent_cursor.closed:
+        if not hasattr(self, "_persistent_cursor") or self._persistent_cursor is None or self._persistent_cursor.closed:
             if self._pool:
                 # For pools, get a connection from the pool
                 self._persistent_conn = self._pool.getconn()

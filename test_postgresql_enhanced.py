@@ -62,6 +62,11 @@ from gramps.gen.db import DbTxn
 from postgresqlenhanced import PostgreSQLEnhanced
 
 
+# -------------------------------------------------------------------------
+#
+# TestResult
+#
+# -------------------------------------------------------------------------
 class TestResult:
     """Track test results"""
 
@@ -93,6 +98,11 @@ class TestResult:
         return self.failed == 0
 
 
+# -------------------------------------------------------------------------
+#
+# PostgreSQLEnhancedTester
+#
+# -------------------------------------------------------------------------
 class PostgreSQLEnhancedTester:
     """Comprehensive test suite for PostgreSQL Enhanced addon"""
 

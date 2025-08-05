@@ -54,6 +54,7 @@ def main():
     tests = [
         ("Database Modes Test", "test_database_modes.py"),
         ("Table Prefix Mechanism", "test_table_prefix_mechanism.py"),
+        ("Separate Mode Comprehensive", "test_separate_comprehensive.py"),
         ("Monolithic Comprehensive", "test_monolithic_comprehensive.py"),
         ("PostgreSQL Enhanced Basic", "test_postgresql_enhanced.py"),
         ("Database Contents Verification", "verify_database_contents.py"),

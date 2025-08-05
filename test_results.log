@@ -1,0 +1,531 @@
+PostgreSQL Enhanced Plugin - Comprehensive Test Suite
+NO FALLBACK POLICY: All tests must pass completely
+
+============================================================
+Running: Database Modes Test
+============================================================
+Testing Gramps PostgreSQL Database Modes
+==================================================
+
+=== Testing SEPARATE Database Mode ===
+Created config at: /tmp/gramps_test_separate_gq513f3u/connection.txt
+  Creating database: family_tree_1
+  Creating database: family_tree_2
+  Creating database: research_tree
+  ✓ Database family_tree_1: 1 test records
+  ✓ Database family_tree_2: 1 test records
+  ✓ Database research_tree: 1 test records
+
+Separate mode test: SUCCESS
+  - Each tree has its own database
+  - Complete isolation between trees
+  - No table prefixes needed
+  Cleaning up database: family_tree_1
+  Cleaning up database: family_tree_2
+  Cleaning up database: research_tree
+
+=== Testing MONOLITHIC Database Mode ===
+Created config at: /tmp/gramps_test_monolithic_7ofsek0p/connection.txt
+  Creating shared database: gramps_monolithic_test
+
+  Tables in gramps_monolithic_test:
+    - familytree1_test_mode
+    - familytree2_test_mode
+    - researchtree_test_mode
+
+  Verifying data isolation:
+    ✓ family_tree_1: 1 records
+    ✓ family_tree_2: 1 records
+    ✓ research_tree: 1 records
+
+Monolithic mode test: SUCCESS
+  - All trees share database: gramps_monolithic_test
+  - Each tree uses table prefixes
+  - Data properly isolated by prefix
+  Cleaning up database: gramps_monolithic_test
+
+=== Database Mode Comparison ===
+
+SEPARATE Mode (Recommended):
+  ✓ Complete isolation between trees
+  ✓ Easier backup/restore per tree
+  ✓ Can set different permissions per tree
+  ✓ No table name conflicts
+  ✓ Simpler queries (no prefixes)
+  ✗ More databases to manage
+  ✗ Can't query across trees easily
+
+MONOLITHIC Mode:
+  ✓ Single database to manage
+  ✓ Can query across trees if needed
+  ✓ Single connection pool
+  ✗ Table name prefixes required
+  ✗ Backup includes all trees
+  ✗ Same permissions for all trees
+  ✗ Risk of prefix collision
+
+Recommendation: Use SEPARATE mode unless you have
+specific requirements for cross-tree queries.
+
+==================================================
+All database mode tests completed successfully!
+
+✅ Database Modes Test: PASSED
+
+============================================================
+Running: Table Prefix Mechanism
+============================================================
+======================================================================
+Table Prefix Mechanism Test Suite
+======================================================================
+
+=== Testing Table Prefix Creation ===
+
+Testing tree name: 'smith_family'
+  ✓ Prefix: 'smith_family_'
+  ✓ Found smith_family_person
+  ✓ Found smith_family_family
+  ✓ Found smith_family_event
+  ✓ Found smith_family_place
+  ✓ Found smith_family_source
+
+Testing tree name: 'jones-research'
+  ✓ Prefix: 'jones_research_'
+  ✓ Found jones_research_person
+  ✓ Found jones_research_family
+  ✓ Found jones_research_event
+  ✓ Found jones_research_place
+  ✓ Found jones_research_source
+
+Testing tree name: 'wilson.archive'
+  ✓ Prefix: 'wilson_archive_'
+  ✓ Found wilson_archive_person
+  ✓ Found wilson_archive_family
+  ✓ Found wilson_archive_event
+  ✓ Found wilson_archive_place
+  ✓ Found wilson_archive_source
+
+Testing tree name: 'test 123'
+  ✓ Prefix: 'test_123_'
+  ✓ Found test_123_person
+  ✓ Found test_123_family
+  ✓ Found test_123_event
+  ✓ Found test_123_place
+  ✓ Found test_123_source
+
+Testing tree name: 'O'Brien_Family'
+  ✓ Prefix: 'O_Brien_Family_'
+  ✓ Found O_Brien_Family_person
+  ✓ Found O_Brien_Family_family
+  ✓ Found O_Brien_Family_event
+  ✓ Found O_Brien_Family_place
+  ✓ Found O_Brien_Family_source
+
+=== Testing Query Modification ===
+✓ Query modification correct
+  Original:  SELECT * FROM person WHERE handle = %s
+  Modified:  SELECT * FROM testprefix_person WHERE handle = %s
+
+✓ Query modification correct
+  Original:  SELECT p.*, f.gramps_id FROM person p JOIN family f ON p.handle = f.father_handle
+  Modified:  SELECT p.*, f.gramps_id FROM testprefix_person p JOIN testprefix_family f ON p.handle = f.father_handle
+
+✓ Query modification correct
+  Original:  INSERT INTO event (handle, json_data) VALUES (%s, %s)
+  Modified:  INSERT INTO testprefix_event (handle, json_data) VALUES (%s, %s)
+
+✓ Query modification correct
+  Original:  UPDATE person SET json_data = %s WHERE handle = %s
+  Modified:  UPDATE testprefix_person SET json_data = %s WHERE handle = %s
+
+✓ Query modification correct
+  Original:  DELETE FROM note WHERE handle = %s
+  Modified:  DELETE FROM testprefix_note WHERE handle = %s
+
+✓ Query modification correct
+  Original:  SELECT * FROM person WHERE handle IN (SELECT person_handle FROM reference WHERE object_handle = %s)
+  Modified:  SELECT * FROM testprefix_person WHERE handle IN (SELECT person_handle FROM testprefix_reference WHERE object_handle = %s)
+
+
+=== Testing SQL Injection Prevention ===
+Malicious input: ''; DROP TABLE person; --'
+Sanitized to:    'DROPTABLEperson_'
+✓ Safely sanitized
+
+Malicious input: 'person WHERE 1=1; --'
+Sanitized to:    'personWHERE11_'
+✓ Safely sanitized
+
+Malicious input: '../../../etc/passwd'
+Sanitized to:    'etcpasswd_'
+✓ Safely sanitized
+
+Malicious input: 'person UNION SELECT * FROM smithfamily_person'
+Sanitized to:    'personUNIONSELECTFROMsmithfamily_person_'
+✓ Safely sanitized
+
+Malicious input: ''); DELETE FROM person; --'
+Sanitized to:    'DELETEFROMperson_'
+✓ Safely sanitized
+
+
+=== Testing Concurrent Tree Operations ===
+✓ Concurrent operations test (simplified)
+  - Each tree uses its own table prefix
+  - PostgreSQL handles concurrent access
+  - No shared state between trees
+
+======================================================================
+SUMMARY
+======================================================================
+Table Prefix Creation: PASSED
+Query Modification: PASSED
+SQL Injection Prevention: PASSED
+Concurrent Operations: PASSED
+
+Total: 4/4 passed
+
+✅ Table Prefix Mechanism: PASSED
+
+============================================================
+Running: Separate Mode Comprehensive
+============================================================
+
+============================================================
+PostgreSQL Enhanced - Separate Mode Comprehensive Tests
+NO FALLBACK POLICY: All tests must pass completely
+============================================================
+
+=== Setting up test environment ===
+
+=== Cleaning up existing test databases ===
+  Dropping existing database: gramps_test_smith
+  Created config for gramps_test_smith at /tmp/gramps_gramps_test_smith_9ycmz48i/gramps_test_smith/connection_info.txt
+  Created config for gramps_test_jones at /tmp/gramps_gramps_test_jones_6iava2a1/gramps_test_jones/connection_info.txt
+  Created config for gramps_test_wilson at /tmp/gramps_gramps_test_wilson_a9s4wg6q/gramps_test_wilson/connection_info.txt
+
+=== Test 1: Separate Database Creation ===
+
+  Creating database for gramps_test_smith...
+    ✓ Database gramps_test_smith created successfully
+
+  ❌ Test 1 FAILED: Missing tables in gramps_test_smith: {'lds_ord', 'name', 'child_ref', 'place_ref', 'person_ref', 'media_ref', 'address', 'event_ref', 'location', 'reporef', 'datamap', 'url', 'place_name'}
+
+=== Test 2: Data Isolation Between Databases ===
+
+  Adding John Smith to gramps_test_smith...
+    ✓ Added person to gramps_test_smith
+
+  ❌ Test 2 FAILED: 'gramps_test_jones'
+
+=== Test 3: Concurrent Access to Different Databases ===
+
+  Starting concurrent operations...
+    Started thread for gramps_test_smith
+
+  ❌ Test 3 FAILED: 'gramps_test_jones'
+
+=== Test 4: Complex Operations with Relationships ===
+
+  Testing complex operations in gramps_test_smith...
+    ✓ Created family with 2 parents and 3 children
+
+  ❌ Test 4 FAILED: type object 'MockEvent' has no attribute 'MARRIAGE'
+
+=== Test 5: Performance Test ===
+
+  ❌ Test 5 FAILED: 'gramps_test_jones'
+
+============================================================
+TEST SUMMARY - SEPARATE MODE
+============================================================
+Tests passed: 0
+Tests failed: 5
+
+Errors:
+  - Test 1: Missing tables in gramps_test_smith: {'lds_ord', 'name', 'child_ref', 'place_ref', 'person_ref', 'media_ref', 'address', 'event_ref', 'location', 'reporef', 'datamap', 'url', 'place_name'}
+  - Test 2: 'gramps_test_jones'
+  - Test 3: 'gramps_test_jones'
+  - Test 4: type object 'MockEvent' has no attribute 'MARRIAGE'
+  - Test 5: 'gramps_test_jones'
+
+=== Cleaning up test environment ===
+  Closed connection to gramps_test_smith
+  Removed /tmp/gramps_gramps_test_smith_9ycmz48i
+  Removed /tmp/gramps_gramps_test_jones_6iava2a1
+  Removed /tmp/gramps_gramps_test_wilson_a9s4wg6q
+
+❌ Separate Mode Comprehensive: FAILED (exit code: 1)
+
+============================================================
+Running: Monolithic Comprehensive
+============================================================
+======================================================================
+PostgreSQL Enhanced - Monolithic Mode Comprehensive Test Suite
+======================================================================
+
+=== Setting Up Monolithic Mode Test Environment ===
+✓ Created shared database: gramps_monolithic_test
+
+=== Test 1: Creating Multiple Trees in Monolithic Mode ===
+
+Creating tree: smith_family
+  ✓ Created 13 tables with prefix 'smith_family_'
+
+Creating tree: jones_research
+  ✓ Created 13 tables with prefix 'jones_research_'
+
+Creating tree: wilson_archive
+  ✓ Created 13 tables with prefix 'wilson_archive_'
+
+✓ All trees created successfully in monolithic mode
+
+=== Test 2: Data Isolation Between Trees ===
+
+✗ Data isolation test failed: 'MockName' object has no attribute 'get_first_name'
+
+=== Test 3: Concurrent Access to Different Trees ===
+Starting 3 concurrent threads...
+  ✓ Started thread for smith_family
+  ✓ Started thread for jones_research
+  ✓ Started thread for wilson_archive
+
+Waiting for threads to complete...
+
+Thread results:
+  ✓ smith_family: Added 10 people
+  ✓ jones_research: Added 10 people
+  ✓ wilson_archive: Added 10 people
+
+Verifying final data counts:
+
+✗ Concurrent access test failed: smith_family has 0 people, expected 11
+
+=== Test 4: CRUD Operations on All Object Types ===
+
+=== Test 5: Performance Comparison ===
+
+Testing monolithic mode performance:
+  Add 100 people: 0.000s
+
+✗ Performance test failed: 'PostgreSQLEnhanced' object has no attribute 'iter_people'
+
+=== Cleaning Up ===
+  ✓ Closed smith_family
+  ✓ Closed jones_research
+  ✓ Closed wilson_archive
+  ✗ Failed to drop database: database "gramps_monolithic_test" is being accessed by other users
+DETAIL:  There are 3 other sessions using the database.
+
+======================================================================
+TEST SUMMARY
+======================================================================
+Total tests: 4
+Passed: 1
+Failed: 3
+
+Errors:
+  - Data isolation: 'MockName' object has no attribute 'get_first_name'
+  - Concurrent access: smith_family has 0 people, expected 11
+  - Performance test: 'PostgreSQLEnhanced' object has no attribute 'iter_people'
+
+======================================================================
+
+❌ Monolithic Comprehensive: FAILED (exit code: 1)
+
+============================================================
+Running: PostgreSQL Enhanced Basic
+============================================================
+
+🚀 Running PostgreSQL Enhanced Test Suite
+============================================================
+
+🔧 Setting up test database: test_gramps_1754403224
+✅ Database initialized
+❌ FAIL: Person CRUD: 'MockPerson' object has no attribute 'add_url'
+❌ FAIL: Family CRUD: 'MockChildRef' object has no attribute 'set_reference_handle'
+❌ FAIL: Event CRUD: 
+❌ FAIL: Place CRUD: 
+❌ FAIL: Source/Citation CRUD: 'MockSource' object has no attribute 'set_publication_info'
+❌ FAIL: Repository CRUD: 'MockRepository' object has no attribute 'set_name'
+❌ FAIL: Media CRUD: 'MockMedia' object has no attribute 'set_path'
+❌ FAIL: Note CRUD: 'MockNote' object has no attribute 'set_styledtext'
+❌ FAIL: Tag CRUD: 'MockTag' object has no attribute 'set_color'
+❌ FAIL: Person secondary columns: 'NoneType' object is not subscriptable
+DEBUG: person has columns: ['handle', 'json_data', 'given_name', 'surname', 'gramps_id', 'gender', 'death_ref_index', 'birth_ref_index', 'change', 'private', 'change_time']
+DEBUG: family has columns: ['handle', 'json_data', 'gramps_id', 'father_handle', 'mother_handle', 'change', 'private', 'change_time']
+DEBUG: event has columns: ['handle', 'json_data', 'gramps_id', 'description', 'place', 'change', 'private', 'change_time']
+DEBUG: place has columns: ['handle', 'json_data', 'enclosed_by', 'gramps_id', 'title', 'long', 'lat', 'code', 'change', 'private', 'change_time']
+DEBUG: source has columns: ['handle', 'json_data', 'gramps_id', 'title', 'author', 'pubinfo', 'abbrev', 'change', 'private', 'change_time']
+DEBUG: citation has columns: ['handle', 'json_data', 'gramps_id', 'page', 'confidence', 'source_handle', 'change', 'private', 'change_time']
+DEBUG: repository has columns: ['handle', 'json_data', 'gramps_id', 'name', 'change', 'private', 'change_time']
+DEBUG: media has columns: ['handle', 'json_data', 'gramps_id', 'path', 'mime', 'desc_', 'checksum', 'change', 'private', 'change_time']
+DEBUG: note has columns: ['handle', 'json_data', 'gramps_id', 'format', 'change', 'private', 'change_time']
+DEBUG: tag has columns: ['handle', 'json_data', 'name', 'color', 'priority', 'change', 'change_time']
+✅ PASS: All secondary columns
+❌ FAIL: Search operations: Expected 2 test Smiths, found 0
+❌ FAIL: Filter operations: 
+❌ FAIL: Family relationships: No family created in previous tests
+❌ FAIL: Person references: 'MockPerson' object has no attribute 'add_event_ref'
+  Bulk insert rate: 69167.3 persons/second
+❌ FAIL: Bulk operations: Expected 100 bulk persons, found 0
+✅ PASS: Concurrent access
+✅ PASS: Edge cases
+❌ FAIL: Error handling: 
+
+🧹 Cleaning up test database
+✅ Test database dropped
+
+============================================================
+Test Summary: 3/19 passed (0.11s)
+
+Failed tests:
+  - Person CRUD: 'MockPerson' object has no attribute 'add_url'
+  - Family CRUD: 'MockChildRef' object has no attribute 'set_reference_handle'
+  - Event CRUD: 
+  - Place CRUD: 
+  - Source/Citation CRUD: 'MockSource' object has no attribute 'set_publication_info'
+  - Repository CRUD: 'MockRepository' object has no attribute 'set_name'
+  - Media CRUD: 'MockMedia' object has no attribute 'set_path'
+  - Note CRUD: 'MockNote' object has no attribute 'set_styledtext'
+  - Tag CRUD: 'MockTag' object has no attribute 'set_color'
+  - Person secondary columns: 'NoneType' object is not subscriptable
+  - Search operations: Expected 2 test Smiths, found 0
+  - Filter operations: 
+  - Family relationships: No family created in previous tests
+  - Person references: 'MockPerson' object has no attribute 'add_event_ref'
+  - Bulk operations: Expected 100 bulk persons, found 0
+  - Error handling: 
+============================================================
+
+
+❌ PostgreSQL Enhanced Basic: FAILED (exit code: 1)
+
+============================================================
+Running: Database Contents Verification
+============================================================
+======================================================================
+PostgreSQL Enhanced - Comprehensive Database Verification
+======================================================================
+
+=== VERIFYING MONOLITHIC DATABASE CONTENTS ===
+
+1. ALL TABLES IN DATABASE:
+   - jones_research_citation
+   - jones_research_event
+   - jones_research_family
+   - jones_research_gender_stats
+   - jones_research_media
+   - jones_research_metadata
+   - jones_research_note
+   - jones_research_person
+   - jones_research_place
+   - jones_research_reference
+   - jones_research_repository
+   - jones_research_source
+   - jones_research_tag
+   - name_group
+   - smith_family_citation
+   - smith_family_event
+   - smith_family_family
+   - smith_family_gender_stats
+   - smith_family_media
+   - smith_family_metadata
+   - smith_family_note
+   - smith_family_person
+   - smith_family_place
+   - smith_family_reference
+   - smith_family_repository
+   - smith_family_source
+   - smith_family_tag
+   - surname
+   - wilson_archive_citation
+   - wilson_archive_event
+   - wilson_archive_family
+   - wilson_archive_gender_stats
+   - wilson_archive_media
+   - wilson_archive_metadata
+   - wilson_archive_note
+   - wilson_archive_person
+   - wilson_archive_place
+   - wilson_archive_reference
+   - wilson_archive_repository
+   - wilson_archive_source
+   - wilson_archive_tag
+
+2. PERSON TABLE CONTENTS:
+
+   Table: jones_research_person
+   Record count: 0
+
+   Table: smith_family_person
+   Record count: 0
+
+   Table: wilson_archive_person
+   Record count: 0
+
+3. DATA ISOLATION VERIFICATION:
+   jones_research: 0 total records, 0 unique surnames
+     ✓ No cross-contamination detected
+   smith_family: 0 total records, 0 unique surnames
+     ✓ No cross-contamination detected
+   wilson_archive: 0 total records, 0 unique surnames
+     ✓ No cross-contamination detected
+
+4. OTHER OBJECT TYPES:
+
+5. SHARED TABLES (should exist without prefixes):
+   name_group: ✓ EXISTS
+     - 0 records
+   surname: ✓ EXISTS
+     - 0 records
+
+6. METADATA TABLES:
+
+=== VERIFYING SEPARATE DATABASE MODE ===
+
+Found 0 test databases: []
+
+=== VERIFYING QUERY PATTERN MATCHING ===
+
+Testing query pattern matching:
+✓ OK: SELECT handle, json_data FROM person...
+✓ OK: SELECT * FROM person WHERE handle = %s...
+✓ OK: SELECT DISTINCT surname FROM person...
+✓ OK: SELECT p.*, f.* FROM person p JOIN family f ON p.h...
+✓ OK: INSERT INTO person (handle, json_data) VALUES (%s,...
+✓ OK: UPDATE person SET json_data = %s WHERE handle = %s...
+✓ OK: DELETE FROM person WHERE handle = %s...
+✓ OK: SELECT COUNT(*) FROM person...
+✓ OK: SELECT 1 FROM metadata WHERE setting = %s...
+✓ OK: CREATE TABLE IF NOT EXISTS person (handle TEXT PRI...
+✓ OK: CREATE INDEX idx_person_gramps_id ON person (gramp...
+
+======================================================================
+VERIFICATION SUMMARY
+======================================================================
+Monolithic: ✓ PASSED
+Separate: ✓ PASSED
+Patterns: ✓ PASSED
+
+Overall: ✓ ALL CHECKS PASSED
+
+✅ Database Contents Verification: PASSED
+
+============================================================
+TEST SUMMARY
+============================================================
+✅ Database Modes Test
+✅ Table Prefix Mechanism
+❌ Separate Mode Comprehensive
+❌ Monolithic Comprehensive
+❌ PostgreSQL Enhanced Basic
+✅ Database Contents Verification
+
+Total: 6 tests
+Passed: 3
+Failed: 3
+Skipped: 0
+
+❌ FAILED: Not all tests passed!
+NO FALLBACK POLICY: Fix all failures before proceeding!

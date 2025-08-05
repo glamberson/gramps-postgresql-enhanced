@@ -79,19 +79,12 @@ except ValueError:
     _trans = glocale.translation
 _ = _trans.gettext
 
-# Import local modules - use absolute imports for Gramps plugins
-plugin_dir = os.path.dirname(__file__)
-if plugin_dir not in sys.path:
-    sys.path.insert(0, plugin_dir)
-
-# pylint: disable=wrong-import-position
+# Import local modules - use relative imports for addon modules
 from connection import PostgreSQLConnection
 from schema import PostgreSQLSchema
 from migration import MigrationManager
 from queries import EnhancedQueries
 from schema_columns import REQUIRED_COLUMNS
-
-# pylint: enable=wrong-import-position
 
 # -------------------------------------------------------------------------
 #
@@ -103,7 +96,7 @@ MIN_POSTGRESQL_VERSION = 15
 
 # Import debugging utilities
 try:
-    from .debug_utils import DebugContext
+    from debug_utils import DebugContext
 
     DEBUG_AVAILABLE = True
 except ImportError:

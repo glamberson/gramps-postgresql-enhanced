@@ -39,6 +39,11 @@ import os
 from ..connection import PostgreSQLConnection
 
 
+# -------------------------------------------------------------------------
+#
+# TestPostgreSQLConnection
+#
+# -------------------------------------------------------------------------
 class TestPostgreSQLConnection(unittest.TestCase):
     """Test PostgreSQL connection handling."""
     
@@ -148,6 +153,11 @@ class TestPostgreSQLConnection(unittest.TestCase):
         self.assertTrue(hasattr(conn, '_add_environment_variables'))
 
 
+# -------------------------------------------------------------------------
+#
+# TestConnectionPooling
+#
+# -------------------------------------------------------------------------
 class TestConnectionPooling(unittest.TestCase):
     """Test connection pooling functionality."""
     
