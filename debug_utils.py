@@ -27,7 +27,11 @@ from collections import defaultdict, deque
 from contextlib import contextmanager
 
 
-# Performance tracking
+# -------------------------------------------------------------------------
+#
+# QueryProfiler
+#
+# -------------------------------------------------------------------------
 class QueryProfiler:
     """
     Track and analyze SQL query performance.
@@ -155,6 +159,11 @@ class QueryProfiler:
         self.start_time = time.time()
 
 
+# -------------------------------------------------------------------------
+#
+# TransactionTracker
+#
+# -------------------------------------------------------------------------
 class TransactionTracker:
     """
     Track transaction lifecycle and nesting.
@@ -268,6 +277,11 @@ class TransactionTracker:
         return sp_name
 
 
+# -------------------------------------------------------------------------
+#
+# ConnectionMonitor
+#
+# -------------------------------------------------------------------------
 class ConnectionMonitor:
     """
     Monitor database connections and pool status.
@@ -329,6 +343,11 @@ class ConnectionMonitor:
         }
 
 
+# -------------------------------------------------------------------------
+#
+# DebugContext
+#
+# -------------------------------------------------------------------------
 class DebugContext:
     """Enhanced debug context manager for detailed operation tracking."""
 
@@ -466,7 +485,11 @@ def format_sql_query(sql, params=None, max_length=200):
     return sql
 
 
-# Connection pool monitor
+# -------------------------------------------------------------------------
+#
+# PoolMonitor
+#
+# -------------------------------------------------------------------------
 class PoolMonitor:
     """Monitor psycopg connection pool statistics."""
 

@@ -31,11 +31,7 @@ import os
 from psycopg import sql
 from psycopg.types.json import Jsonb
 
-# Add plugin directory to path for imports
-plugin_dir = os.path.dirname(__file__)
-if plugin_dir not in sys.path:
-    sys.path.insert(0, plugin_dir)
-
+# Import local modules using relative imports
 from schema_columns import REQUIRED_COLUMNS, REQUIRED_INDEXES
 
 # -------------------------------------------------------------------------
