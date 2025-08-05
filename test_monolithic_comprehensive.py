@@ -658,7 +658,7 @@ shared_database_name = {self.shared_db}
             self.results['errors'].append(f"Performance test: {str(e)}")
             print(f"\n✗ Performance test failed: {e}")
     
-    def cleanup(self):
+    def cleanup(self, keep_database=False):
         """Clean up test environment."""
         print("\n=== Cleaning Up ===")
         
@@ -678,27 +678,30 @@ shared_database_name = {self.shared_db}
             except:
                 pass
         
-        # Drop test database
-        try:
-            admin_conn = psycopg.connect(
-                host=DB_CONFIG['host'],
-                port=DB_CONFIG['port'],
-                user=DB_CONFIG['user'],
-                password=DB_CONFIG['password'],
-                dbname='postgres'
-            )
-            admin_conn.autocommit = True
-            
-            with admin_conn.cursor() as cur:
-                cur.execute(sql.SQL("DROP DATABASE IF EXISTS {}").format(
-                    sql.Identifier(self.shared_db)
-                ))
-                print(f"  ✓ Dropped test database: {self.shared_db}")
+        # Drop test database (unless asked to keep it)
+        if not keep_database:
+            try:
+                admin_conn = psycopg.connect(
+                    host=DB_CONFIG['host'],
+                    port=DB_CONFIG['port'],
+                    user=DB_CONFIG['user'],
+                    password=DB_CONFIG['password'],
+                    dbname='postgres'
+                )
+                admin_conn.autocommit = True
                 
-            admin_conn.close()
-            
-        except Exception as e:
-            print(f"  ✗ Failed to drop database: {e}")
+                with admin_conn.cursor() as cur:
+                    cur.execute(sql.SQL("DROP DATABASE IF EXISTS {}").format(
+                        sql.Identifier(self.shared_db)
+                    ))
+                    print(f"  ✓ Dropped test database: {self.shared_db}")
+                    
+                admin_conn.close()
+                
+            except Exception as e:
+                print(f"  ✗ Failed to drop database: {e}")
+        else:
+            print(f"  ℹ Keeping test database: {self.shared_db} for verification")
     
     def run_all_tests(self):
         """Run all monolithic mode tests."""
@@ -726,7 +729,9 @@ shared_database_name = {self.shared_db}
                     pass
             
         finally:
-            self.cleanup()
+            # Check if we should keep the database for verification
+            keep_db = '--keep-db' in sys.argv
+            self.cleanup(keep_database=keep_db)
         
         # Print summary
         print("\n" + "=" * 70)
