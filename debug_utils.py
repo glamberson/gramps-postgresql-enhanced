@@ -29,9 +29,20 @@ from contextlib import contextmanager
 
 # Performance tracking
 class QueryProfiler:
-    """Track and analyze SQL query performance."""
+    """
+    Track and analyze SQL query performance.
+
+    Maintains detailed statistics about all SQL queries executed,
+    including timing, categorization, and slow query detection.
+    """
 
     def __init__(self):
+        """
+        Initialize the query profiler.
+
+        Sets up query tracking with configurable slow query threshold
+        from GRAMPS_POSTGRESQL_SLOW_QUERY environment variable.
+        """
         self.queries = defaultdict(list)
         self.slow_query_threshold = float(
             os.environ.get("GRAMPS_POSTGRESQL_SLOW_QUERY", "0.1")
@@ -40,7 +51,20 @@ class QueryProfiler:
         self.start_time = time.time()
 
     def record_query(self, sql, params, duration, rows_affected=None):
-        """Record a query execution."""
+        """
+        Record a query execution.
+
+        :param sql: SQL query string
+        :type sql: str
+        :param params: Query parameters
+        :type params: tuple or list or None
+        :param duration: Query execution time in seconds
+        :type duration: float
+        :param rows_affected: Number of rows affected (optional)
+        :type rows_affected: int or None
+        :returns: Query information dictionary
+        :rtype: dict
+        """
         query_info = {
             "sql": sql,
             "params": params,
@@ -57,30 +81,41 @@ class QueryProfiler:
 
         # Check for slow queries
         if duration > self.slow_query_threshold:
-            LOG.warning(f"Slow query ({duration:.3f}s): {sql[:100]}...")
+            LOG.warning("Slow query (%.3fs): %s...", duration, sql[:100])
 
         return query_info
 
     def _categorize_query(self, sql):
-        """Categorize SQL query by operation type."""
+        """
+        Categorize SQL query by operation type.
+
+        :param sql: SQL query string
+        :type sql: str
+        :returns: Operation category (SELECT, INSERT, UPDATE, etc.)
+        :rtype: str
+        """
         sql_upper = sql.strip().upper()
         if sql_upper.startswith("SELECT"):
             return "SELECT"
-        elif sql_upper.startswith("INSERT"):
+        if sql_upper.startswith("INSERT"):
             return "INSERT"
-        elif sql_upper.startswith("UPDATE"):
+        if sql_upper.startswith("UPDATE"):
             return "UPDATE"
-        elif sql_upper.startswith("DELETE"):
+        if sql_upper.startswith("DELETE"):
             return "DELETE"
-        elif sql_upper.startswith("CREATE"):
+        if sql_upper.startswith("CREATE"):
             return "CREATE"
-        elif "BEGIN" in sql_upper or "COMMIT" in sql_upper or "ROLLBACK" in sql_upper:
+        if "BEGIN" in sql_upper or "COMMIT" in sql_upper or "ROLLBACK" in sql_upper:
             return "TRANSACTION"
-        else:
-            return "OTHER"
+        return "OTHER"
 
     def get_statistics(self):
-        """Get query performance statistics."""
+        """
+        Get query performance statistics.
+
+        :returns: Dictionary with comprehensive query statistics
+        :rtype: dict
+        """
         stats = {
             "total_queries": sum(len(queries) for queries in self.queries.values()),
             "uptime_seconds": time.time() - self.start_time,
@@ -110,22 +145,41 @@ class QueryProfiler:
         return stats
 
     def reset(self):
-        """Reset profiler statistics."""
+        """
+        Reset profiler statistics.
+
+        Clears all query history and resets the start time.
+        """
         self.queries.clear()
         self.query_history.clear()
         self.start_time = time.time()
 
 
 class TransactionTracker:
-    """Track transaction lifecycle and nesting."""
+    """
+    Track transaction lifecycle and nesting.
+
+    Monitors transaction operations, timing, and savepoint usage
+    for debugging and performance analysis.
+    """
 
     def __init__(self):
+        """
+        Initialize transaction tracker.
+        """
         self.active_transactions = {}
         self.transaction_history = deque(maxlen=100)
         self.savepoint_counter = 0
 
     def begin_transaction(self, txn_id, name=None):
-        """Record transaction start."""
+        """
+        Record transaction start.
+
+        :param txn_id: Unique transaction identifier
+        :type txn_id: str
+        :param name: Optional transaction name
+        :type name: str or None
+        """
         self.active_transactions[txn_id] = {
             "id": txn_id,
             "name": name,
@@ -133,10 +187,21 @@ class TransactionTracker:
             "savepoints": [],
             "operations": [],
         }
-        LOG.debug(f"Transaction started: {txn_id} ({name})")
+        LOG.debug("Transaction started: %s (%s)", txn_id, name)
 
     def add_operation(self, txn_id, operation, obj_type, handle):
-        """Add operation to transaction."""
+        """
+        Add operation to transaction.
+
+        :param txn_id: Transaction identifier
+        :type txn_id: str
+        :param operation: Operation type (add, commit, remove)
+        :type operation: str
+        :param obj_type: Type of object
+        :type obj_type: str
+        :param handle: Object handle
+        :type handle: str
+        """
         if txn_id in self.active_transactions:
             self.active_transactions[txn_id]["operations"].append(
                 {
@@ -148,31 +213,54 @@ class TransactionTracker:
             )
 
     def commit_transaction(self, txn_id):
-        """Record transaction commit."""
+        """
+        Record transaction commit.
+
+        :param txn_id: Transaction identifier
+        :type txn_id: str
+        :returns: Transaction info dictionary
+        :rtype: dict or None
+        """
         if txn_id in self.active_transactions:
             txn = self.active_transactions.pop(txn_id)
             txn["end_time"] = time.time()
             txn["duration"] = txn["end_time"] - txn["start_time"]
             txn["status"] = "committed"
             self.transaction_history.append(txn)
-            LOG.debug(f"Transaction committed: {txn_id} ({txn['duration']:.3f}s)")
+            LOG.debug("Transaction committed: %s (%.3fs)", txn_id, txn["duration"])
             return txn
+        return None
 
     def rollback_transaction(self, txn_id):
-        """Record transaction rollback."""
+        """
+        Record transaction rollback.
+
+        :param txn_id: Transaction identifier
+        :type txn_id: str
+        :returns: Transaction info dictionary
+        :rtype: dict or None
+        """
         if txn_id in self.active_transactions:
             txn = self.active_transactions.pop(txn_id)
             txn["end_time"] = time.time()
             txn["duration"] = txn["end_time"] - txn["start_time"]
             txn["status"] = "rolled_back"
             self.transaction_history.append(txn)
-            LOG.warning(f"Transaction rolled back: {txn_id}")
+            LOG.warning("Transaction rolled back: %s", txn_id)
             return txn
+        return None
 
     def create_savepoint(self, txn_id):
-        """Create a savepoint within transaction."""
+        """
+        Create a savepoint within transaction.
+
+        :param txn_id: Transaction identifier
+        :type txn_id: str
+        :returns: Savepoint name
+        :rtype: str
+        """
         self.savepoint_counter += 1
-        sp_name = f"sp_{self.savepoint_counter}"
+        sp_name = "sp_%d" % self.savepoint_counter
         if txn_id in self.active_transactions:
             self.active_transactions[txn_id]["savepoints"].append(
                 {"name": sp_name, "created": time.time()}
@@ -181,28 +269,53 @@ class TransactionTracker:
 
 
 class ConnectionMonitor:
-    """Monitor database connections and pool status."""
+    """
+    Monitor database connections and pool status.
+
+    Tracks connection events, errors, and pool health metrics
+    for operational monitoring.
+    """
 
     def __init__(self):
+        """
+        Initialize connection monitor.
+        """
         self.connection_events = deque(maxlen=500)
         self.pool_stats = {}
 
     def record_connection_event(self, event_type, details=None):
-        """Record a connection event."""
+        """
+        Record a connection event.
+
+        :param event_type: Type of event (connect, disconnect, error)
+        :type event_type: str
+        :param details: Additional event details
+        :type details: dict or None
+        """
         event = {
             "type": event_type,
             "timestamp": datetime.now().isoformat(),
             "details": details or {},
         }
         self.connection_events.append(event)
-        LOG.debug(f"Connection event: {event_type}")
+        LOG.debug("Connection event: %s", event_type)
 
     def update_pool_stats(self, pool_info):
-        """Update connection pool statistics."""
+        """
+        Update connection pool statistics.
+
+        :param pool_info: Pool statistics dictionary
+        :type pool_info: dict
+        """
         self.pool_stats = {"updated": datetime.now().isoformat(), **pool_info}
 
     def get_connection_health(self):
-        """Get connection health metrics."""
+        """
+        Get connection health metrics.
+
+        :returns: Health metrics including errors and pool stats
+        :rtype: dict
+        """
         recent_events = list(self.connection_events)[-50:]
         error_count = sum(1 for e in recent_events if "error" in e["type"].lower())
 

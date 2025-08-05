@@ -26,7 +26,6 @@ Supports migration from:
 import logging
 import pickle
 import sqlite3
-import json
 from datetime import datetime
 
 # -------------------------------------------------------------------------
@@ -90,6 +89,7 @@ class MigrationManager:
         Initialize migration manager.
 
         :param connection: PostgreSQLConnection instance
+        :type connection: PostgreSQLConnection
         """
         self.conn = connection
         self.log = logging.getLogger(".PostgreSQLEnhanced.Migration")
@@ -98,7 +98,10 @@ class MigrationManager:
         """
         Detect if migration from another backend is needed.
 
-        Returns:
+        :returns: Migration type needed or None
+        :rtype: str or None
+
+        Possible return values:
         - 'sqlite': SQLite database detected
         - 'postgresql_standard': Standard PostgreSQL addon detected
         - 'needs_jsonb': Tables exist but no JSONB columns
@@ -133,10 +136,13 @@ class MigrationManager:
         Migrate data from a SQLite database.
 
         :param sqlite_path: Path to SQLite database file
+        :type sqlite_path: str
         :param callback: Progress callback function(current, total, message)
-        :return: Dictionary with migration statistics
+        :type callback: callable or None
+        :returns: Dictionary with migration statistics
+        :rtype: dict
         """
-        self.log.info(f"Starting migration from SQLite: {sqlite_path}")
+        self.log.info("Starting migration from SQLite: %s", sqlite_path)
 
         stats = {
             "start_time": datetime.now(),
@@ -206,7 +212,7 @@ class MigrationManager:
                 # Rollback on error
                 self.conn.rollback()
                 stats["errors"].append(str(e))
-                self.log.error(f"Migration failed: {e}")
+                self.log.error("Migration failed: %s", e)
                 raise
 
             finally:
@@ -214,7 +220,7 @@ class MigrationManager:
 
         except Exception as e:
             stats["errors"].append(str(e))
-            self.log.error(f"Migration error: {e}")
+            self.log.error("Migration error: %s", e)
             raise
 
         stats["end_time"] = datetime.now()
@@ -223,11 +229,20 @@ class MigrationManager:
         return stats
 
     def _migrate_object_type(self, source, obj_type):
-        """Migrate all objects of a specific type."""
+        """
+        Migrate all objects of a specific type.
+
+        :param source: SQLite database connection
+        :type source: sqlite3.Connection
+        :param obj_type: Type of object to migrate
+        :type obj_type: str
+        :returns: Number of objects migrated
+        :rtype: int
+        """
         count = 0
 
         # Get all objects from SQLite
-        cursor = source.execute(f"SELECT handle, blob_data FROM {obj_type}")
+        cursor = source.execute("SELECT handle, blob_data FROM %s" % obj_type)
 
         for row in cursor:
             handle = row["handle"]
@@ -257,7 +272,7 @@ class MigrationManager:
                 count += 1
 
             except Exception as e:
-                self.log.warning(f"Error migrating {obj_type} {handle}: {e}")
+                self.log.warning("Error migrating %s %s: %s", obj_type, handle, e)
 
         return count
 
@@ -267,6 +282,13 @@ class MigrationManager:
 
         This is a simplified version - the real implementation
         would use Gramps' built-in serialization.
+
+        :param obj: Gramps object to convert
+        :type obj: object
+        :param obj_type: Type of object
+        :type obj_type: str
+        :returns: JSON-compatible dictionary
+        :rtype: dict
         """
         # Get the serialized form
         if hasattr(obj, "serialize"):
@@ -422,22 +444,22 @@ class MigrationManager:
             if not self.conn.column_exists(obj_type, "json_data"):
                 self.conn.execute(
                     f"""
-                    ALTER TABLE {obj_type} 
+                    ALTER TABLE {obj_type}
                     ADD COLUMN json_data JSONB
                 """
                 )
 
                 self.conn.execute(
                     f"""
-                    ALTER TABLE {obj_type} 
-                    ADD COLUMN gramps_id VARCHAR(50) 
+                    ALTER TABLE {obj_type}
+                    ADD COLUMN gramps_id VARCHAR(50)
                     GENERATED ALWAYS AS (json_data->>'gramps_id') STORED
                 """
                 )
 
                 self.conn.execute(
                     f"""
-                    ALTER TABLE {obj_type} 
+                    ALTER TABLE {obj_type}
                     ADD COLUMN change_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 """
                 )
@@ -508,7 +530,7 @@ class MigrationManager:
                 count += 1
 
             except Exception as e:
-                self.log.warning(f"Error upgrading {obj_type} {handle}: {e}")
+                self.log.warning("Error upgrading %s %s: %s", obj_type, handle, e)
 
         return count
 

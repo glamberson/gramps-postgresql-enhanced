@@ -64,6 +64,7 @@ class EnhancedQueries:
         Initialize enhanced queries.
 
         :param connection: PostgreSQLConnection instance
+        :type connection: PostgreSQLConnection
         """
         self.conn = connection
         self.log = logging.getLogger(".PostgreSQLEnhanced.Queries")
@@ -75,9 +76,13 @@ class EnhancedQueries:
         Uses recursive CTEs to traverse ancestry efficiently.
 
         :param handle1: First person's handle
+        :type handle1: str
         :param handle2: Second person's handle
+        :type handle2: str
         :param max_generations: Maximum generations to search
-        :return: List of (ancestor_handle, gen1, gen2) tuples
+        :type max_generations: int
+        :returns: List of (ancestor_handle, gen1, gen2) tuples
+        :rtype: list
         """
         query = """
         WITH RECURSIVE 
@@ -143,9 +148,13 @@ class EnhancedQueries:
         Uses bidirectional search with PostgreSQL graph traversal.
 
         :param handle1: Start person's handle
+        :type handle1: str
         :param handle2: End person's handle
+        :type handle2: str
         :param max_depth: Maximum relationship depth to search
-        :return: List of handles forming the path, or None
+        :type max_depth: int
+        :returns: List of handles forming the path, or None
+        :rtype: list or None
         """
         # This is a simplified version - a full implementation would
         # use more sophisticated graph algorithms

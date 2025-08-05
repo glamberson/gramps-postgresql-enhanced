@@ -36,9 +36,7 @@ from contextlib import contextmanager
 #
 # -------------------------------------------------------------------------
 import psycopg
-from psycopg.types.json import Jsonb
 from psycopg import sql
-from psycopg.rows import dict_row
 
 # -------------------------------------------------------------------------
 #
@@ -80,6 +78,10 @@ class PostgreSQLConnection:
         self._pool = None
         self._connection = None
         self._savepoints = []
+        self._persistent_cursor = None
+        self._persistent_conn = None
+        self._last_cursor = None
+        self.schema = "public"  # Default schema
 
         # Parse connection string
         conninfo, options = self._parse_connection_string(
@@ -87,7 +89,9 @@ class PostgreSQLConnection:
         )
 
         # Log connection attempt
-        self.log.debug(f"Connecting to PostgreSQL: {self._sanitize_conninfo(conninfo)}")
+        self.log.debug(
+            "Connecting to PostgreSQL: %s", self._sanitize_conninfo(conninfo)
+        )
 
         # Handle connection pooling if requested
         pool_size = options.get("pool_size", 0)
@@ -109,7 +113,12 @@ class PostgreSQLConnection:
         self._collations = []
         self.check_collation(glocale)
 
-    def _parse_connection_string(self, connection_info, username, password):
+        # Store options from parsing
+        self.schema = options.get("schema", "public")
+
+    def _parse_connection_string(
+        self, connection_info, username, password
+    ):  # pylint: disable=too-many-branches
         """
         Parse various connection string formats.
 
@@ -117,7 +126,7 @@ class PostgreSQLConnection:
         """
         options = {}
 
-        self.log.debug(f"Parsing connection string: {connection_info}")
+        self.log.debug("Parsing connection string: %s", connection_info)
 
         if connection_info.startswith(("postgresql://", "postgres://")):
             # URL format - parse options from query string
@@ -167,13 +176,12 @@ class PostgreSQLConnection:
         # Add any environment variables not already in conninfo
         self._add_environment_variables(conninfo)
 
-        self.log.debug(f"Final conninfo: {conninfo}, options: {options}")
+        self.log.debug("Final conninfo: %s, options: %s", conninfo, options)
         return conninfo, options
 
     def _sanitize_conninfo(self, conninfo):
         """Sanitize connection info for logging (hide passwords)."""
         # Hide password in connection string
-        import re
 
         sanitized = re.sub(r"password=[^ ]+", "password=***", conninfo)
         sanitized = re.sub(r":[^:@]+@", ":***@", sanitized)
@@ -198,14 +206,16 @@ class PostgreSQLConnection:
 
     def _create_connection(self, conninfo):
         """Create a single database connection."""
-        self.log.debug(f"Creating connection with conninfo: {conninfo}")
+        self.log.debug("Creating connection with conninfo: %s", conninfo)
         self._connection = psycopg.connect(conninfo)
         self._connection.autocommit = False
 
     def _create_pool(self, conninfo, pool_size):
         """Create a connection pool."""
         # Note: psycopg3 has built-in pool support
-        from psycopg_pool import ConnectionPool
+        from psycopg_pool import (
+            ConnectionPool,
+        )  # pylint: disable=import-outside-toplevel
 
         self._pool = ConnectionPool(
             conninfo,
@@ -213,7 +223,7 @@ class PostgreSQLConnection:
             max_size=pool_size,
             timeout=30.0,
         )
-        self.log.info(f"Created connection pool with size {pool_size}")
+        self.log.info("Created connection pool with size %s", pool_size)
 
     def _setup_connection(self):
         """Set up the connection with required functions and settings."""
@@ -255,7 +265,6 @@ class PostgreSQLConnection:
     def _setup_jsonb_handling(self):
         """Configure JSONB to return as JSON strings for Gramps compatibility."""
         # We handle JSONB conversion in fetchone/fetchall/fetchmany instead
-        pass
 
     @contextmanager
     def _get_cursor(self, row_factory=None):
@@ -298,7 +307,7 @@ class PostgreSQLConnection:
             )
 
             if cur.fetchone()[0] == 0:
-                self.log.warning(f"Collation {pg_collation} not found, using default")
+                self.log.warning("Collation %s not found, using default", pg_collation)
                 pg_collation = "default"
 
         if pg_collation not in self._collations:
@@ -356,9 +365,9 @@ class PostgreSQLConnection:
         # Convert arguments for PostgreSQL compatibility
         pg_args = self._convert_args_for_postgres(pg_query, args)
 
-        self.log.debug(f"SQL: {pg_query}")
+        self.log.debug("SQL: %s", pg_query)
         if pg_args:
-            self.log.debug(f"Args: {pg_args}")
+            self.log.debug("Args: %s", pg_args)
 
         # Get a persistent cursor for DBAPI compatibility
         if not hasattr(self, "_persistent_cursor") or self._persistent_cursor.closed:
@@ -432,12 +441,12 @@ class PostgreSQLConnection:
 
         return query
 
-    def _convert_jsonb_in_row(self, row):
+    def convert_jsonb_in_row(self, row):
         """Convert JSONB dicts to JSON strings in a row."""
         if row is None:
             return None
 
-        import json
+        import json  # pylint: disable=import-outside-toplevel
 
         converted = []
         for value in row:
@@ -452,21 +461,21 @@ class PostgreSQLConnection:
         """Fetch one row from the last query."""
         if hasattr(self, "_last_cursor") and self._last_cursor:
             row = self._last_cursor.fetchone()
-            return self._convert_jsonb_in_row(row)
+            return self.convert_jsonb_in_row(row)
         return None
 
     def fetchall(self):
         """Fetch all rows from the last query."""
         if hasattr(self, "_last_cursor") and self._last_cursor:
             rows = self._last_cursor.fetchall()
-            return [self._convert_jsonb_in_row(row) for row in rows]
+            return [self.convert_jsonb_in_row(row) for row in rows]
         return []
 
     def fetchmany(self, size=ARRAYSIZE):
         """Fetch many rows from the last query."""
         if hasattr(self, "_last_cursor") and self._last_cursor:
             rows = self._last_cursor.fetchmany(size)
-            return [self._convert_jsonb_in_row(row) for row in rows]
+            return [self.convert_jsonb_in_row(row) for row in rows]
         return []
 
     def commit(self):
@@ -638,40 +647,102 @@ class PostgreSQLConnection:
 #
 # -------------------------------------------------------------------------
 class CursorWrapper:
-    """Wrapper for psycopg3 cursor that converts JSONB to strings for Gramps."""
+    """
+    Wrapper for psycopg3 cursor that converts JSONB to strings for Gramps.
+
+    This wrapper ensures that JSONB data is automatically converted to
+    JSON strings when fetched, maintaining compatibility with Gramps
+    which expects string representations of JSON data.
+    """
 
     def __init__(self, cursor, connection):
+        """
+        Initialize cursor wrapper.
+
+        :param cursor: psycopg cursor to wrap
+        :type cursor: psycopg.Cursor
+        :param connection: Parent connection object
+        :type connection: PostgreSQLConnection
+        """
         self._cursor = cursor
         self._connection = connection
 
     def __getattr__(self, name):
-        """Delegate all other attributes to the wrapped cursor."""
+        """
+        Delegate all other attributes to the wrapped cursor.
+
+        :param name: Attribute name
+        :type name: str
+        :returns: Attribute from wrapped cursor
+        :rtype: Any
+        """
         return getattr(self._cursor, name)
 
     def execute(self, query, params=None):
-        """Execute query through the wrapped cursor."""
+        """
+        Execute query through the wrapped cursor.
+
+        :param query: SQL query to execute
+        :type query: str
+        :param params: Optional query parameters
+        :type params: tuple or list or None
+        :returns: Result of cursor execute
+        :rtype: Any
+        """
         return self._cursor.execute(query, params)
 
     def fetchone(self):
-        """Fetch one row, converting JSONB to strings."""
+        """
+        Fetch one row, converting JSONB to strings.
+
+        :returns: Single row with JSONB converted to strings
+        :rtype: tuple or None
+        """
         row = self._cursor.fetchone()
-        return self._connection._convert_jsonb_in_row(row)
+        return self._connection.convert_jsonb_in_row(row)
 
     def fetchall(self):
-        """Fetch all rows, converting JSONB to strings."""
+        """
+        Fetch all rows, converting JSONB to strings.
+
+        :returns: List of rows with JSONB converted to strings
+        :rtype: list
+        """
         rows = self._cursor.fetchall()
-        return [self._connection._convert_jsonb_in_row(row) for row in rows]
+        return [self._connection.convert_jsonb_in_row(row) for row in rows]
 
     def fetchmany(self, size=None):
-        """Fetch many rows, converting JSONB to strings."""
+        """
+        Fetch many rows, converting JSONB to strings.
+
+        :param size: Number of rows to fetch
+        :type size: int or None
+        :returns: List of rows with JSONB converted to strings
+        :rtype: list
+        """
         rows = self._cursor.fetchmany(size) if size else self._cursor.fetchmany()
-        return [self._connection._convert_jsonb_in_row(row) for row in rows]
+        return [self._connection.convert_jsonb_in_row(row) for row in rows]
 
     def __enter__(self):
-        """Context manager entry."""
+        """
+        Context manager entry.
+
+        :returns: Self for use in with statement
+        :rtype: CursorWrapper
+        """
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
-        """Context manager exit."""
+        """
+        Context manager exit.
+
+        Note: Does not close the cursor as it's persistent.
+
+        :param exc_type: Exception type if an exception occurred
+        :type exc_type: type or None
+        :param exc_val: Exception value if an exception occurred
+        :type exc_val: Exception or None
+        :param exc_tb: Exception traceback if an exception occurred
+        :type exc_tb: traceback or None
+        """
         # Don't close the cursor - it's persistent
-        pass
