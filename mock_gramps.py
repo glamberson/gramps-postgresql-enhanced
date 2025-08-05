@@ -32,22 +32,32 @@ sys.modules["gramps.gen.db.dbconst"] = MagicMock()
 sys.modules["gramps.gen.db.exceptions"] = MagicMock()
 sys.modules["gramps.gen.lib"] = MagicMock()
 sys.modules["gramps.gen.lib.serialize"] = MagicMock()
-sys.modules["gramps.plugins"] = MagicMock()
-sys.modules["gramps.plugins.db"] = MagicMock()
-sys.modules["gramps.plugins.db.dbapi"] = MagicMock()
-sys.modules["gramps.plugins.db.dbapi.dbapi"] = MagicMock()
+# Don't mock the dbapi module - we need the real DBAPI class
+# sys.modules["gramps.plugins"] = MagicMock()
+# sys.modules["gramps.plugins.db"] = MagicMock()
+# sys.modules["gramps.plugins.db.dbapi"] = MagicMock()
+# sys.modules["gramps.plugins.db.dbapi.dbapi"] = MagicMock()
 sys.modules["gramps.gen.db.generic"] = MagicMock()
 
 
 # -------------------------------------------------------------------------
 #
-# MockDBAPI
+# MockDBAPI - No longer needed, we'll use the real DBAPI
 #
 # -------------------------------------------------------------------------
+
+# We'll just skip creating MockDBAPI and not replace DBAPI
+"""
 class MockDBAPI:
     def __init__(self):
+        # Initialize base class if it's the real DBAPI
+        if REAL_DBAPI_AVAILABLE:
+            super().__init__()
+        
+        # Set up mock attributes
         self.undolog = None
         self.readonly = False
+        self.transaction = None
         self._txn_begin = MagicMock()
         self._txn_commit = MagicMock()
         self.execute = MagicMock()
@@ -67,11 +77,7 @@ class MockDBAPI:
         self.get_note_handles = MagicMock(return_value=[])
         self.get_tag_handles = MagicMock(return_value=[])
 
-        self.add_person = MagicMock()
-        self.add_family = MagicMock()
-        self.add_event = MagicMock()
-        self.add_place = MagicMock()
-        self.add_source = MagicMock()
+        # Don't override add_ methods - let them be inherited from DBAPI
 
         self.commit_person = MagicMock()
         self.commit_family = MagicMock()
@@ -97,19 +103,35 @@ class MockDBAPI:
         self.iter_event_handles = MagicMock(return_value=iter([]))
         self.iter_place_handles = MagicMock(return_value=iter([]))
         self.iter_source_handles = MagicMock(return_value=iter([]))
-        # Add iterator methods for people
+
         self.iter_people = MagicMock(return_value=iter([]))
+        self.iter_families = MagicMock(return_value=iter([]))
+        self.iter_events = MagicMock(return_value=iter([]))
+        self.iter_places = MagicMock(return_value=iter([]))
+        self.iter_sources = MagicMock(return_value=iter([]))
+        
+    def transaction_begin(self, transaction):
+        # Begin a transaction.
+        self.transaction = transaction
+        if hasattr(self, 'dbapi') and hasattr(self.dbapi, 'begin'):
+            self.dbapi.begin()
+        return transaction
+    
+    def transaction_commit(self, transaction):
+        # Commit a transaction.
+        if hasattr(self, 'dbapi') and hasattr(self.dbapi, 'commit'):
+            self.dbapi.commit()
+        self.transaction = None
+    
+    def transaction_abort(self, transaction):
+        # Abort a transaction.
+        if hasattr(self, 'dbapi') and hasattr(self.dbapi, 'rollback'):
+            self.dbapi.rollback()
+        self.transaction = None
+"""
 
-
-        # Add get by gramps_id methods
-        self.get_person_from_gramps_id = MagicMock()
-        self.get_family_from_gramps_id = MagicMock()
-        self.get_event_from_gramps_id = MagicMock()
-        self.get_place_from_gramps_id = MagicMock()
-        self.get_source_from_gramps_id = MagicMock()
-
-
-sys.modules["gramps.plugins.db.dbapi.dbapi"].DBAPI = MockDBAPI
+# Don't replace DBAPI - we'll use the real one
+# sys.modules["gramps.plugins.db.dbapi.dbapi"].DBAPI = MockDBAPI
 
 
 # -------------------------------------------------------------------------
@@ -436,16 +458,53 @@ class MockSource:
 # MockDbTxn
 #
 # -------------------------------------------------------------------------
-class MockDbTxn:
-    def __init__(self, msg, db):
+from collections import defaultdict
+
+class MockDbTxn(defaultdict):
+    """Mock transaction that mimics the real DbTxn class."""
+    
+    def __init__(self, msg, db, batch=False):
+        # Initialize as a defaultdict like the real DbTxn
+        defaultdict.__init__(self, list)
         self.msg = msg
         self.db = db
+        self.batch = batch
+        self.first = None
+        self.last = None
+        
+        # Call transaction_begin if available (matches real DbTxn)
+        if hasattr(db, 'transaction_begin'):
+            db.transaction_begin(self)
 
     def __enter__(self):
         return self
 
-    def __exit__(self, *args):
-        pass
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        # Match the real DbTxn behavior - call transaction_commit/abort on the db
+        if exc_type is None:
+            # No exception - commit the transaction
+            if hasattr(self.db, 'transaction_commit'):
+                self.db.transaction_commit(self)
+            elif hasattr(self.db, 'dbapi') and hasattr(self.db.dbapi, 'commit'):
+                # Fallback to direct commit
+                self.db.dbapi.commit()
+        else:
+            # Exception occurred - abort transaction
+            if hasattr(self.db, 'transaction_abort'):
+                self.db.transaction_abort(self)
+            elif hasattr(self.db, 'dbapi') and hasattr(self.db.dbapi, 'rollback'):
+                # Fallback to direct rollback
+                self.db.dbapi.rollback()
+        # Don't suppress the exception
+        return False
+    
+    def get_description(self):
+        """Return the transaction description."""
+        return self.msg
+    
+    def set_description(self, msg):
+        """Set the transaction description."""
+        self.msg = msg
 
 
 sys.modules["gramps.gen.lib"].Person = MockPerson
