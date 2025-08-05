@@ -23,21 +23,63 @@
 import sys
 from unittest.mock import MagicMock, Mock
 
-# Create mock modules
-sys.modules["gramps"] = MagicMock()
-sys.modules["gramps.gen"] = MagicMock()
-sys.modules["gramps.gen.const"] = MagicMock()
-sys.modules["gramps.gen.db"] = MagicMock()
-sys.modules["gramps.gen.db.dbconst"] = MagicMock()
-sys.modules["gramps.gen.db.exceptions"] = MagicMock()
-sys.modules["gramps.gen.lib"] = MagicMock()
-sys.modules["gramps.gen.lib.serialize"] = MagicMock()
-# Don't mock the dbapi module - we need the real DBAPI class
-# sys.modules["gramps.plugins"] = MagicMock()
-# sys.modules["gramps.plugins.db"] = MagicMock()
-# sys.modules["gramps.plugins.db.dbapi"] = MagicMock()
-# sys.modules["gramps.plugins.db.dbapi.dbapi"] = MagicMock()
-sys.modules["gramps.gen.db.generic"] = MagicMock()
+# Add real Gramps to path if available
+sys.path.insert(0, '/usr/lib/python3/dist-packages')
+
+# Try to import real Gramps modules first
+try:
+    # Import real DBAPI and other critical modules
+    from gramps.plugins.db.dbapi.dbapi import DBAPI as RealDBAPI
+    from gramps.gen.db.exceptions import DbConnectionError as RealDbConnectionError
+    from gramps.gen.lib.serialize import JSONSerializer as RealJSONSerializer
+    # Import real Gramps lib classes
+    from gramps.gen.lib import Person as RealPerson
+    from gramps.gen.lib import Family as RealFamily
+    from gramps.gen.lib import Event as RealEvent
+    from gramps.gen.lib import Place as RealPlace
+    from gramps.gen.lib import Source as RealSource
+    from gramps.gen.lib import Name as RealName
+    from gramps.gen.lib import Surname as RealSurname
+    from gramps.gen.db import DbTxn as RealDbTxn
+    # Try to import DbGenericUndo
+    try:
+        from gramps.gen.db.generic import DbGenericUndo as RealDbGenericUndo
+    except ImportError:
+        RealDbGenericUndo = None
+    REAL_GRAMPS_AVAILABLE = True
+except ImportError:
+    REAL_GRAMPS_AVAILABLE = False
+    RealDBAPI = None
+    RealDbConnectionError = Exception
+    RealJSONSerializer = None
+    RealPerson = None
+    RealFamily = None
+    RealEvent = None
+    RealPlace = None
+    RealSource = None
+    RealName = None
+    RealSurname = None
+    RealDbTxn = None
+    RealDbGenericUndo = None
+
+# Only mock modules that aren't critical for database operations
+if not REAL_GRAMPS_AVAILABLE:
+    # Create mock modules only if real Gramps is not available
+    sys.modules["gramps"] = MagicMock()
+    sys.modules["gramps.gen"] = MagicMock()
+    sys.modules["gramps.gen.const"] = MagicMock()
+    sys.modules["gramps.gen.db"] = MagicMock()
+    sys.modules["gramps.gen.db.dbconst"] = MagicMock()
+    sys.modules["gramps.gen.db.exceptions"] = MagicMock()
+    sys.modules["gramps.gen.lib"] = MagicMock()
+    sys.modules["gramps.gen.lib.serialize"] = MagicMock()
+    sys.modules["gramps.gen.db.generic"] = MagicMock()
+else:
+    # Only mock the parts we need to mock
+    if "gramps.gen.const" not in sys.modules:
+        sys.modules["gramps.gen.const"] = MagicMock()
+    if "gramps.gen.db.generic" not in sys.modules:
+        sys.modules["gramps.gen.db.generic"] = MagicMock()
 
 
 # -------------------------------------------------------------------------
@@ -139,11 +181,13 @@ class MockDBAPI:
 # MockDbConnectionError
 #
 # -------------------------------------------------------------------------
-class MockDbConnectionError(Exception):
-    pass
-
-
-sys.modules["gramps.gen.db.exceptions"].DbConnectionError = MockDbConnectionError
+if REAL_GRAMPS_AVAILABLE:
+    # Use the real DbConnectionError
+    MockDbConnectionError = RealDbConnectionError
+else:
+    class MockDbConnectionError(Exception):
+        pass
+    sys.modules["gramps.gen.db.exceptions"].DbConnectionError = MockDbConnectionError
 
 
 # -------------------------------------------------------------------------
@@ -151,12 +195,14 @@ sys.modules["gramps.gen.db.exceptions"].DbConnectionError = MockDbConnectionErro
 # MockJSONSerializer
 #
 # -------------------------------------------------------------------------
-class MockJSONSerializer:
-    def object_to_data(self, obj):
-        return {}
-
-
-sys.modules["gramps.gen.lib.serialize"].JSONSerializer = MockJSONSerializer
+if REAL_GRAMPS_AVAILABLE:
+    # Use the real JSONSerializer
+    MockJSONSerializer = RealJSONSerializer
+else:
+    class MockJSONSerializer:
+        def object_to_data(self, obj):
+            return {}
+    sys.modules["gramps.gen.lib.serialize"].JSONSerializer = MockJSONSerializer
 
 
 # -------------------------------------------------------------------------
@@ -164,15 +210,39 @@ sys.modules["gramps.gen.lib.serialize"].JSONSerializer = MockJSONSerializer
 # MockDbGenericUndo
 #
 # -------------------------------------------------------------------------
-class MockDbGenericUndo:
-    def __init__(self, db, log):
-        pass
+if REAL_GRAMPS_AVAILABLE and RealDbGenericUndo:
+    # Use the real DbGenericUndo
+    MockDbGenericUndo = RealDbGenericUndo
+else:
+    class MockDbGenericUndo:
+        def __init__(self, db, log):
+            self.db = db
+            self.log = log
+            self.undo_data = []
+            
+        def open(self):
+            pass
+            
+        def append(self, data):
+            """Append undo data."""
+            self.undo_data.append(data)
+            
+        def undo(self):
+            """Undo last operation."""
+            if self.undo_data:
+                return self.undo_data.pop()
+            return None
+            
+        def redo(self):
+            """Redo operation."""
+            pass
+            
+        def clear(self):
+            """Clear undo data."""
+            self.undo_data = []
 
-    def open(self):
-        pass
-
-
-sys.modules["gramps.gen.db.generic"].DbGenericUndo = MockDbGenericUndo
+if not REAL_GRAMPS_AVAILABLE or not RealDbGenericUndo:
+    sys.modules["gramps.gen.db.generic"].DbGenericUndo = MockDbGenericUndo
 
 
 # -------------------------------------------------------------------------
@@ -180,21 +250,40 @@ sys.modules["gramps.gen.db.generic"].DbGenericUndo = MockDbGenericUndo
 # MockLocale
 #
 # -------------------------------------------------------------------------
-class MockLocale:
-    def get_addon_translator(self, file):
-        return self
+if REAL_GRAMPS_AVAILABLE:
+    try:
+        from gramps.gen.const import GRAMPS_LOCALE
+    except ImportError:
+        # Create a mock locale if not available
+        class MockLocale:
+            def get_addon_translator(self, file):
+                return self
 
-    def gettext(self, text):
-        return text
+            def gettext(self, text):
+                return text
 
-    def get_collation(self):
-        """Return a collation string for testing."""
-        return "en_US.UTF-8"
+            def get_collation(self):
+                """Return a collation string for testing."""
+                return "en_US.UTF-8"
 
-    translation = property(lambda self: self)
+            translation = property(lambda self: self)
+        
+        sys.modules["gramps.gen.const"].GRAMPS_LOCALE = MockLocale()
+else:
+    class MockLocale:
+        def get_addon_translator(self, file):
+            return self
 
+        def gettext(self, text):
+            return text
 
-sys.modules["gramps.gen.const"].GRAMPS_LOCALE = MockLocale()
+        def get_collation(self):
+            """Return a collation string for testing."""
+            return "en_US.UTF-8"
+
+        translation = property(lambda self: self)
+
+    sys.modules["gramps.gen.const"].GRAMPS_LOCALE = MockLocale()
 
 # Mock the _ function
 import builtins
@@ -507,14 +596,36 @@ class MockDbTxn(defaultdict):
         self.msg = msg
 
 
-sys.modules["gramps.gen.lib"].Person = MockPerson
-sys.modules["gramps.gen.lib"].Name = MockName
-sys.modules["gramps.gen.lib"].Surname = MockSurname
-sys.modules["gramps.gen.lib"].Family = MockFamily
-sys.modules["gramps.gen.lib"].Event = MockEvent
-sys.modules["gramps.gen.lib"].Place = MockPlace
-sys.modules["gramps.gen.lib"].Source = MockSource
-sys.modules["gramps.gen.db"].DbTxn = MockDbTxn
+# Use real classes if available, otherwise use mocks
+if REAL_GRAMPS_AVAILABLE:
+    # Real classes are already imported, make them available as our "Mock" versions
+    Person = RealPerson
+    Name = RealName
+    Surname = RealSurname
+    Family = RealFamily
+    Event = RealEvent
+    Place = RealPlace
+    Source = RealSource
+    DbTxn = RealDbTxn
+else:
+    # Use mock classes and register them
+    Person = MockPerson
+    Name = MockName
+    Surname = MockSurname
+    Family = MockFamily
+    Event = MockEvent
+    Place = MockPlace
+    Source = MockSource
+    DbTxn = MockDbTxn
+    
+    sys.modules["gramps.gen.lib"].Person = MockPerson
+    sys.modules["gramps.gen.lib"].Name = MockName
+    sys.modules["gramps.gen.lib"].Surname = MockSurname
+    sys.modules["gramps.gen.lib"].Family = MockFamily
+    sys.modules["gramps.gen.lib"].Event = MockEvent
+    sys.modules["gramps.gen.lib"].Place = MockPlace
+    sys.modules["gramps.gen.lib"].Source = MockSource
+    sys.modules["gramps.gen.db"].DbTxn = MockDbTxn
 
 
 # -------------------------------------------------------------------------
@@ -638,10 +749,19 @@ class MockChildRef:
 
 
 
-sys.modules["gramps.gen.lib"].Citation = MockCitation
-sys.modules["gramps.gen.lib"].Repository = MockRepository
-sys.modules["gramps.gen.lib"].Media = MockMedia
-sys.modules["gramps.gen.lib"].Note = MockNote
-sys.modules["gramps.gen.lib"].Tag = MockTag
-sys.modules["gramps.gen.lib"].EventType = MockEventType
-sys.modules["gramps.gen.lib"].ChildRef = MockChildRef
+if not REAL_GRAMPS_AVAILABLE:
+    sys.modules["gramps.gen.lib"].Citation = MockCitation
+    sys.modules["gramps.gen.lib"].Repository = MockRepository
+    sys.modules["gramps.gen.lib"].Media = MockMedia
+    sys.modules["gramps.gen.lib"].Note = MockNote
+    sys.modules["gramps.gen.lib"].Tag = MockTag
+    sys.modules["gramps.gen.lib"].EventType = MockEventType
+    sys.modules["gramps.gen.lib"].ChildRef = MockChildRef
+
+# Export classes for tests to use
+__all__ = [
+    'Person', 'Family', 'Event', 'Place', 'Source',
+    'Name', 'Surname', 'DbTxn',
+    'MockCitation', 'MockRepository', 'MockMedia',
+    'MockNote', 'MockTag', 'MockEventType', 'MockChildRef'
+]

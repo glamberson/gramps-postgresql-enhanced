@@ -28,9 +28,8 @@ from postgresqlenhanced import PostgreSQLEnhanced
 from connection import PostgreSQLConnection
 from schema import PostgreSQLSchema
 
-# Import Gramps classes from mock
-from gramps.gen.db import DbTxn
-from gramps.gen.lib import Person, Name, Surname, Family, Event, Place, Source
+# Import Gramps classes (real if available, mock otherwise)
+from mock_gramps import DbTxn, Person, Name, Surname, Family, Event, Place, Source
 
 # Database configuration
 DB_CONFIG = {
