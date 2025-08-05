@@ -784,6 +784,124 @@ class PostgreSQLEnhanced(DBAPI):
 
         return stats
 
+    def commit_person(self, person, trans):
+        """
+        Override commit_person to handle NULL first names gracefully.
+        
+        The Gramps core genderstats module doesn't handle NULL first names,
+        causing AttributeError when it tries to call split() on None.
+        This is a common case in genealogy (unknown names, especially for women).
+        
+        We temporarily patch the genderstats function to handle None.
+        """
+        # Import the genderstats module
+        from gramps.gen.lib import genderstats
+        
+        # Save the original function
+        original_get_key_from_name = genderstats._get_key_from_name
+        
+        # Create a patched version that handles None
+        def patched_get_key_from_name(name):
+            if name is None:
+                return ""
+            return original_get_key_from_name(name)
+        
+        # Temporarily patch the function
+        genderstats._get_key_from_name = patched_get_key_from_name
+        try:
+            # Call the parent method with the patched function
+            super().commit_person(person, trans)
+        finally:
+            # Restore the original function
+            genderstats._get_key_from_name = original_get_key_from_name
+    
+    def get_person_from_handle(self, handle):
+        """
+        Override to return None instead of raising exception for nonexistent handles.
+        This matches the expected Gramps behavior.
+        """
+        try:
+            return super().get_person_from_handle(handle)
+        except:
+            return None
+    
+    def get_family_from_handle(self, handle):
+        """Override to return None for nonexistent handles."""
+        try:
+            return super().get_family_from_handle(handle)
+        except:
+            return None
+    
+    def get_event_from_handle(self, handle):
+        """Override to return None for nonexistent handles."""
+        try:
+            return super().get_event_from_handle(handle)
+        except:
+            return None
+    
+    def get_place_from_handle(self, handle):
+        """Override to return None for nonexistent handles."""
+        try:
+            return super().get_place_from_handle(handle)
+        except:
+            return None
+    
+    def get_source_from_handle(self, handle):
+        """Override to return None for nonexistent handles."""
+        try:
+            return super().get_source_from_handle(handle)
+        except:
+            return None
+    
+    def get_citation_from_handle(self, handle):
+        """Override to return None for nonexistent handles."""
+        try:
+            return super().get_citation_from_handle(handle)
+        except:
+            return None
+    
+    def get_repository_from_handle(self, handle):
+        """Override to return None for nonexistent handles."""
+        try:
+            return super().get_repository_from_handle(handle)
+        except:
+            return None
+    
+    def get_media_from_handle(self, handle):
+        """Override to return None for nonexistent handles."""
+        try:
+            return super().get_media_from_handle(handle)
+        except:
+            return None
+    
+    def get_note_from_handle(self, handle):
+        """Override to return None for nonexistent handles."""
+        try:
+            return super().get_note_from_handle(handle)
+        except:
+            return None
+    
+    def get_tag_from_handle(self, handle):
+        """Override to return None for nonexistent handles."""
+        try:
+            return super().get_tag_from_handle(handle)
+        except:
+            return None
+    
+    def _order_by_person_key(self, person):
+        """
+        Override to handle NULL names properly.
+        
+        The parent class doesn't handle None values in names,
+        causing concatenation errors in concurrent updates.
+        """
+        if person.primary_name and person.primary_name.surname_list:
+            surname = person.primary_name.surname_list[0]
+            surname_text = surname.surname if surname.surname else ""
+            first_name = person.primary_name.first_name if person.primary_name.first_name else ""
+            return surname_text + " " + first_name
+        return ""
+
     def _get_metadata(self, key, default="_"):
         """
         Override to handle table prefixes in monolithic mode.
@@ -827,6 +945,7 @@ class PostgreSQLEnhanced(DBAPI):
     def _set_metadata(self, key, value, use_txn=True):
         """
         Override to handle table prefixes in monolithic mode.
+        Uses INSERT ... ON CONFLICT to avoid concurrent update errors.
 
         :param key: Metadata key to set
         :type key: str
@@ -835,30 +954,54 @@ class PostgreSQLEnhanced(DBAPI):
         :param use_txn: Whether to use transaction
         :type use_txn: bool
         """
-        if use_txn:
-            self._txn_begin()
+        import psycopg
+        
+        # Retry logic for concurrent access
+        max_retries = 3
+        for attempt in range(max_retries):
+            try:
+                if use_txn:
+                    self._txn_begin()
 
-        prefix = (
-            self.table_prefix
-            if hasattr(self, "table_prefix") and self.table_prefix
-            else ""
-        )
-        table_name = f"{prefix}metadata"
+                prefix = (
+                    self.table_prefix
+                    if hasattr(self, "table_prefix") and self.table_prefix
+                    else ""
+                )
+                table_name = f"{prefix}metadata"
 
-        self.dbapi.execute(f"SELECT 1 FROM {table_name} WHERE setting = %s", [key])
-        row = self.dbapi.fetchone()
-        if row:
-            self.dbapi.execute(
-                f"UPDATE {table_name} SET value = %s WHERE setting = %s",
-                [pickle.dumps(value), key],
-            )
-        else:
-            self.dbapi.execute(
-                f"INSERT INTO {table_name} (setting, value) VALUES (%s, %s)",
-                [key, pickle.dumps(value)],
-            )
-        if use_txn:
-            self._txn_commit()
+                # Use UPSERT (INSERT ... ON CONFLICT) to avoid race conditions
+                # This is atomic and handles concurrent access properly
+                self.dbapi.execute(
+                    f"""
+                    INSERT INTO {table_name} (setting, value) 
+                    VALUES (%s, %s)
+                    ON CONFLICT (setting) 
+                    DO UPDATE SET value = EXCLUDED.value
+                    """,
+                    [key, pickle.dumps(value)]
+                )
+                
+                if use_txn:
+                    self._txn_commit()
+                    
+                # Success, exit retry loop
+                break
+                
+            except psycopg.errors.SerializationFailure as e:
+                # Rollback and retry for serialization failures
+                if use_txn:
+                    try:
+                        self._txn_abort()
+                    except:
+                        pass
+                        
+                if attempt < max_retries - 1:
+                    import time
+                    time.sleep(0.01 * (2 ** attempt))  # Exponential backoff
+                    continue
+                else:
+                    raise
 
 
 # ------------------------------------------------------------
