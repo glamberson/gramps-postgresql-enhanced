@@ -21,11 +21,14 @@ from psycopg import sql
 # Add plugin directory to Python path
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
+# Mock Gramps imports for testing
+import mock_gramps
+
 from postgresqlenhanced import PostgreSQLEnhanced
 from connection import PostgreSQLConnection
 from schema import PostgreSQLSchema
 
-# Import Gramps classes
+# Import Gramps classes from mock
 from gramps.gen.db import DbTxn
 from gramps.gen.lib import Person, Name, Surname, Family, Event, Place, Source
 

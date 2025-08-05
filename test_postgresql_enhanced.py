@@ -32,12 +32,14 @@ plugin_dir = os.path.dirname(__file__)
 if plugin_dir not in sys.path:
     sys.path.insert(0, plugin_dir)
 
+# Mock Gramps imports first
+import mock_gramps
+
 # Import PostgreSQL modules
 import psycopg
 from psycopg import sql
 
-# Import Gramps modules
-sys.path.insert(0, "/usr/lib/python3/dist-packages")
+# Import Gramps modules (from mock)
 from gramps.gen.lib import (
     Person,
     Family,
