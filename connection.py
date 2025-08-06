@@ -146,11 +146,11 @@ class PostgreSQLConnection:
             port = parts[1] or "5432"
             dbname = parts[2]
 
-            conninfo = f"host={host} port={port} dbname={dbname}"
+            conninfo = "host=%s port={port} dbname={dbname}" % host
             if username:
-                conninfo += f" user={username}"
+                conninfo += " user=%s" % username
             if password:
-                conninfo += f" password={password}"
+                conninfo += " password=%s" % password
 
             # Handle schema if provided
             if len(parts) > 3:
@@ -165,12 +165,12 @@ class PostgreSQLConnection:
                 conninfo = connection_info
             else:
                 # Just a database name
-                conninfo = f"dbname={connection_info}"
+                conninfo = "dbname=%s" % connection_info
 
             if username:
-                conninfo += f" user={username}"
+                conninfo += " user=%s" % username
             if password:
-                conninfo += f" password={password}"
+                conninfo += " password=%s" % password
             options["schema"] = "public"
 
         # Add any environment variables not already in conninfo
@@ -200,7 +200,7 @@ class PostgreSQLConnection:
 
         for env_var, param in env_mapping.items():
             if env_var in os.environ and param not in conninfo:
-                conninfo += f" {param}={os.environ[env_var]}"
+                conninfo += " %s={os.environ[env_var]}" % param
 
         return conninfo
 
@@ -299,8 +299,8 @@ class PostgreSQLConnection:
         with self._get_cursor() as cur:
             cur.execute(
                 """
-                SELECT COUNT(*) 
-                FROM pg_collation 
+                SELECT COUNT(*)
+                FROM pg_collation
                 WHERE collname = %s
             """,
                 [pg_collation],
@@ -422,7 +422,7 @@ class PostgreSQLConnection:
                 count = "ALL"
             query = re.sub(
                 r"LIMIT\s+\d+\s*,\s*-?\d+",
-                f"LIMIT {count} OFFSET {offset}",
+                "LIMIT %s OFFSET {offset}" % count,
                 query,
                 flags=re.IGNORECASE,
             )
@@ -508,22 +508,22 @@ class PostgreSQLConnection:
         track this for savepoint support.
         """
         # Create a savepoint for nested transaction support
-        savepoint_name = f"sp_{len(self._savepoints)}"
-        self.execute(f"SAVEPOINT {savepoint_name}")
+        savepoint_name = "sp_%s" % len(self._savepoints)
+        self.execute("SAVEPOINT %s" % savepoint_name)
         self._savepoints.append(savepoint_name)
 
     def begin_savepoint(self, name=None):
         """Create a named savepoint."""
         if not name:
-            name = f"sp_{len(self._savepoints)}"
-        self.execute(f"SAVEPOINT {name}")
+            name = "sp_%s" % len(self._savepoints)
+        self.execute("SAVEPOINT %s" % name)
         self._savepoints.append(name)
         return name
 
     def rollback_savepoint(self, name):
         """Rollback to a specific savepoint."""
         if name in self._savepoints:
-            self.execute(f"ROLLBACK TO SAVEPOINT {name}")
+            self.execute("ROLLBACK TO SAVEPOINT %s" % name)
             # Remove this and all later savepoints
             idx = self._savepoints.index(name)
             self._savepoints = self._savepoints[:idx]
@@ -554,8 +554,8 @@ class PostgreSQLConnection:
             cur.execute(
                 """
                 SELECT EXISTS (
-                    SELECT FROM information_schema.tables 
-                    WHERE table_schema = 'public' 
+                    SELECT FROM information_schema.tables
+                    WHERE table_schema = 'public'
                     AND table_name = %s
                 )
             """,
@@ -637,7 +637,7 @@ class PostgreSQLConnection:
         if self._connection:
             return getattr(self._connection, name)
         raise AttributeError(
-            f"'{self.__class__.__name__}' object has no attribute '{name}'"
+            "'%s' object has no attribute '{name}'" % self.__class__.__name__
         )
 
 

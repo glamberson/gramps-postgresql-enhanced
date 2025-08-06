@@ -197,7 +197,7 @@ class PostgreSQLEnhanced(DBAPI):
         summary.update(
             {
                 _("Database Backend"): "PostgreSQL Enhanced",
-                _("Database module"): f"psycopg {psycopg.__version__}",
+                _("Database module"): "psycopg %(val)s" % {"val": psycopg.__version__},
                 _("Database module location"): psycopg.__file__,
                 _("JSONB support"): _("Yes") if self._use_jsonb else _("No"),
             }
@@ -211,7 +211,7 @@ class PostgreSQLEnhanced(DBAPI):
                 version_str = self.dbapi.fetchone()[0]
                 match = re.search(r"PostgreSQL (\d+)\.(\d+)", version_str)
                 if match:
-                    pg_version = f"{match.group(1)}.{match.group(2)}"
+                    pg_version = "%(val)s.{match.group(2)}" % {"val": match.group(1)}
                     pg_major = int(match.group(1))
                 else:
                     pg_version = "Unknown"
@@ -235,7 +235,7 @@ class PostgreSQLEnhanced(DBAPI):
                     ORDER BY extname
                 """
                 )
-                extensions = [f"{name} {ver}" for name, ver in self.dbapi.fetchall()]
+                extensions = ["%s {ver}" % name for name, ver in self.dbapi.fetchall()]
                 if extensions:
                     summary[_("Extensions")] = ", ".join(extensions)
 
@@ -254,9 +254,9 @@ class PostgreSQLEnhanced(DBAPI):
                     # Format size nicely
                     size_mb = stats[0] / (1024 * 1024)
                     if size_mb < 1024:
-                        size_str = f"{size_mb:.1f} MB"
+                        size_str = "%(val)s MB" % {"val": size_mb:.1f}
                     else:
-                        size_str = f"{size_mb/1024:.1f} GB"
+                        size_str = "%(val)s GB" % {"val": size_mb/1024:.1f}
 
                     summary[_("Database size")] = size_str
                     if stats[1] is not None:
@@ -337,7 +337,7 @@ class PostgreSQLEnhanced(DBAPI):
                 # Ensure prefix starts with 'tree_' to avoid PostgreSQL identifier issues
                 # (identifiers can't start with numbers)
                 safe_tree_name = re.sub(r"[^a-zA-Z0-9_]", "_", tree_name)
-                self.table_prefix = f"tree_{safe_tree_name}_"
+                self.table_prefix = "tree_%s_" % safe_tree_name
                 self.shared_db_mode = True
                 LOG.info(
                     "Using shared database mode with prefix: %s", self.table_prefix
@@ -345,8 +345,8 @@ class PostgreSQLEnhanced(DBAPI):
 
             # Build connection string
             connection_string = (
-                f"postgresql://{config['user']}:{config['password']}@"
-                f"{config['host']}:{config['port']}/{db_name}"
+                "postgresql://%(val)s:{config['password']}@" % {"val": config['user']}
+                "%(val)s:{config['port']}/{db_name}" % {"val": config['host']}
             )
 
             LOG.info(
@@ -426,6 +426,7 @@ class PostgreSQLEnhanced(DBAPI):
         return True
 
     def load(
+        """Perform load operation."""
         self,
         directory,
         _callback=None,
@@ -592,8 +593,8 @@ class PostgreSQLEnhanced(DBAPI):
         try:
             # Connect to 'postgres' database to check/create the target database
             temp_conn_string = (
-                f"postgresql://{config['user']}:{config['password']}@"
-                f"{config['host']}:{config['port']}/postgres"
+                "postgresql://%(val)s:{config['password']}@" % {"val": config['user']}
+                "%(val)s:{config['port']}/postgres" % {"val": config['host']}
             )
             temp_conn = psycopg.connect(temp_conn_string)
             temp_conn.autocommit = True
@@ -655,7 +656,7 @@ class PostgreSQLEnhanced(DBAPI):
         table = obj.__class__.__name__.lower()
         # Use table prefix if in shared mode
         table_name = (
-            f"{self.table_prefix}{table}" if hasattr(self, "table_prefix") else table
+            "%(val)s{table}" % {"val": self.table_prefix} if hasattr(self, "table_prefix") else table
         )
 
         # Build UPDATE statement based on object type
@@ -663,7 +664,7 @@ class PostgreSQLEnhanced(DBAPI):
             sets = []
 
             for col_name, json_path in REQUIRED_COLUMNS[table].items():
-                sets.append(f"{col_name} = ({json_path})")
+                sets.append("%s = ({json_path})" % col_name)
 
             if sets:
                 # Execute UPDATE using JSONB extraction
@@ -853,6 +854,7 @@ class PostgreSQLEnhanced(DBAPI):
 
         # Create a patched version that handles None
         def patched_get_key_from_name(name):
+            """Perform patched get key from name operation."""
             if name is None:
                 return ""
             return original_get_key_from_name(name)
@@ -869,9 +871,9 @@ class PostgreSQLEnhanced(DBAPI):
     def get_person_from_handle(self, handle):
         """
         Override to return None instead of raising exception for nonexistent handles.
-        
+
         This matches the expected Gramps behavior.
-        
+
         :param handle: Handle of the person to retrieve
         :type handle: str
         :returns: Person object or None if not found
@@ -886,7 +888,7 @@ class PostgreSQLEnhanced(DBAPI):
     def get_family_from_handle(self, handle):
         """
         Override to return None for nonexistent handles.
-        
+
         :param handle: Handle of the family to retrieve
         :type handle: str
         :returns: Family object or None if not found
@@ -904,7 +906,7 @@ class PostgreSQLEnhanced(DBAPI):
         For PostgreSQL, return connection info instead of a filename.
         """
         if hasattr(self, 'table_prefix') and self.table_prefix:
-            return f"postgresql:{self.table_prefix.rstrip('_')}"
+            return "postgresql:%(val)s" % {"val": self.table_prefix.rstrip('_')}
         return "postgresql:database"
 
     def get_save_path(self):
@@ -915,13 +917,13 @@ class PostgreSQLEnhanced(DBAPI):
         """
         if hasattr(self, 'table_prefix') and self.table_prefix:
             # Return something that can be hashed consistently for this tree
-            return f"postgresql_{self.table_prefix.rstrip('_')}"
+            return "postgresql_%(val)s" % {"val": self.table_prefix.rstrip('_')}
         return "postgresql_database"
 
     def get_event_from_handle(self, handle):
         """
         Override to return None for nonexistent handles.
-        
+
         :param handle: Handle of the event to retrieve
         :type handle: str
         :returns: Event object or None if not found
@@ -936,7 +938,7 @@ class PostgreSQLEnhanced(DBAPI):
     def get_place_from_handle(self, handle):
         """
         Override to return None for nonexistent handles.
-        
+
         :param handle: Handle of the place to retrieve
         :type handle: str
         :returns: Place object or None if not found
@@ -951,7 +953,7 @@ class PostgreSQLEnhanced(DBAPI):
     def get_source_from_handle(self, handle):
         """
         Override to return None for nonexistent handles.
-        
+
         :param handle: Handle of the source to retrieve
         :type handle: str
         :returns: Source object or None if not found
@@ -966,7 +968,7 @@ class PostgreSQLEnhanced(DBAPI):
     def get_citation_from_handle(self, handle):
         """
         Override to return None for nonexistent handles.
-        
+
         :param handle: Handle of the citation to retrieve
         :type handle: str
         :returns: Citation object or None if not found
@@ -981,7 +983,7 @@ class PostgreSQLEnhanced(DBAPI):
     def get_repository_from_handle(self, handle):
         """
         Override to return None for nonexistent handles.
-        
+
         :param handle: Handle of the repository to retrieve
         :type handle: str
         :returns: Repository object or None if not found
@@ -996,7 +998,7 @@ class PostgreSQLEnhanced(DBAPI):
     def get_media_from_handle(self, handle):
         """
         Override to return None for nonexistent handles.
-        
+
         :param handle: Handle of the media to retrieve
         :type handle: str
         :returns: Media object or None if not found
@@ -1011,7 +1013,7 @@ class PostgreSQLEnhanced(DBAPI):
     def get_note_from_handle(self, handle):
         """
         Override to return None for nonexistent handles.
-        
+
         :param handle: Handle of the note to retrieve
         :type handle: str
         :returns: Note object or None if not found
@@ -1026,7 +1028,7 @@ class PostgreSQLEnhanced(DBAPI):
     def get_tag_from_handle(self, handle):
         """
         Override to return None for nonexistent handles.
-        
+
         :param handle: Handle of the tag to retrieve
         :type handle: str
         :returns: Tag object or None if not found
@@ -1066,7 +1068,7 @@ class PostgreSQLEnhanced(DBAPI):
         if hasattr(self, "table_prefix") and self.table_prefix:
             # In monolithic mode, use prefixed table name
             self.dbapi.execute(
-                f"SELECT 1 FROM {self.table_prefix}metadata WHERE setting = %s", [key]
+                "SELECT 1 FROM %(val)smetadata WHERE setting = %s" % {"val": self.table_prefix}, [key]
             )
         else:
             # In separate mode, use standard query
@@ -1079,7 +1081,7 @@ class PostgreSQLEnhanced(DBAPI):
                 else ""
             )
             self.dbapi.execute(
-                f"SELECT value FROM {prefix}metadata WHERE setting = %s",
+                "SELECT value FROM %smetadata WHERE setting = %s" % prefix,
                 [key],
             )
             row = self.dbapi.fetchone()
@@ -1118,7 +1120,7 @@ class PostgreSQLEnhanced(DBAPI):
                     if hasattr(self, "table_prefix") and self.table_prefix
                     else ""
                 )
-                table_name = f"{prefix}metadata"
+                table_name = "%smetadata" % prefix
 
                 # Use UPSERT (INSERT ... ON CONFLICT) to avoid race conditions
                 # This is atomic and handles concurrent access properly
@@ -1143,7 +1145,7 @@ class PostgreSQLEnhanced(DBAPI):
                 if use_txn:
                     try:
                         self._txn_abort()
-                    except:
+                    except Exception:
                         pass
 
                 if attempt < max_retries - 1:
@@ -1224,49 +1226,49 @@ class TablePrefixWrapper:
             patterns = [
                 # SELECT patterns - MUST handle queries without keywords before FROM
                 (
-                    rf"\bSELECT\s+(.+?)\s+FROM\s+({table})\b",
-                    lambda m: f"SELECT {m.group(1)} FROM {self._prefix}{m.group(2)}",
+                    r"\bSELECT\s+(.+?)\s+FROM\s+(%s)\b" % table,
+                    lambda m: "SELECT %(val)s FROM {self._prefix}{m.group(2)}" % {"val": m.group(1)},
                 ),
                 # Basic patterns with keywords before table name
-                (rf"\b(FROM)\s+({table})\b", rf"\1 {self._prefix}\2"),
-                (rf"\b(JOIN)\s+({table})\b", rf"\1 {self._prefix}\2"),
-                (rf"\b(INTO)\s+({table})\b", rf"\1 {self._prefix}\2"),
-                (rf"\b(UPDATE)\s+({table})\b", rf"\1 {self._prefix}\2"),
-                (rf"\b(DELETE\s+FROM)\s+({table})\b", rf"\1 {self._prefix}\2"),
-                (rf"\b(INSERT\s+INTO)\s+({table})\b", rf"\1 {self._prefix}\2"),
-                (rf"\b(ALTER\s+TABLE)\s+({table})\b", rf"\1 {self._prefix}\2"),
+                (r"\b(FROM)\s+(%s)\b" % table, r"\1 %(val)s\2" % {"val": self._prefix}),
+                (r"\b(JOIN)\s+(%s)\b" % table, r"\1 %(val)s\2" % {"val": self._prefix}),
+                (r"\b(INTO)\s+(%s)\b" % table, r"\1 %(val)s\2" % {"val": self._prefix}),
+                (r"\b(UPDATE)\s+(%s)\b" % table, r"\1 %(val)s\2" % {"val": self._prefix}),
+                (r"\b(DELETE\s+FROM)\s+(%s)\b" % table, r"\1 %(val)s\2" % {"val": self._prefix}),
+                (r"\b(INSERT\s+INTO)\s+(%s)\b" % table, r"\1 %(val)s\2" % {"val": self._prefix}),
+                (r"\b(ALTER\s+TABLE)\s+(%s)\b" % table, r"\1 %(val)s\2" % {"val": self._prefix}),
                 (
-                    rf"\b(DROP\s+TABLE\s+IF\s+EXISTS)\s+({table})\b",
-                    rf"\1 {self._prefix}\2",
+                    r"\b(DROP\s+TABLE\s+IF\s+EXISTS)\s+(%s)\b" % table,
+                    r"\1 %(val)s\2" % {"val": self._prefix},
                 ),
                 (
-                    rf"\b(CREATE\s+TABLE\s+IF\s+NOT\s+EXISTS)\s+({table})\b",
-                    rf"\1 {self._prefix}\2",
+                    r"\b(CREATE\s+TABLE\s+IF\s+NOT\s+EXISTS)\s+(%s)\b" % table,
+                    r"\1 %(val)s\2" % {"val": self._prefix},
                 ),
-                (rf"\b(CREATE\s+TABLE)\s+({table})\b", rf"\1 {self._prefix}\2"),
+                (r"\b(CREATE\s+TABLE)\s+(%s)\b" % table, r"\1 %(val)s\2" % {"val": self._prefix}),
                 (
-                    rf"\b(CREATE\s+INDEX\s+\S+\s+ON)\s+({table})\b",
-                    rf"\1 {self._prefix}\2",
-                ),
-                (
-                    rf"\b(CREATE\s+UNIQUE\s+INDEX\s+\S+\s+ON)\s+({table})\b",
-                    rf"\1 {self._prefix}\2",
+                    r"\b(CREATE\s+INDEX\s+\S+\s+ON)\s+(%s)\b" % table,
+                    r"\1 %(val)s\2" % {"val": self._prefix},
                 ),
                 (
-                    rf"\b(DROP\s+INDEX\s+IF\s+EXISTS\s+\S+\s+ON)\s+({table})\b",
-                    rf"\1 {self._prefix}\2",
+                    r"\b(CREATE\s+UNIQUE\s+INDEX\s+\S+\s+ON)\s+(%s)\b" % table,
+                    r"\1 %(val)s\2" % {"val": self._prefix},
                 ),
-                (rf"\b(REFERENCES)\s+({table})\b", rf"\1 {self._prefix}\2"),
+                (
+                    r"\b(DROP\s+INDEX\s+IF\s+EXISTS\s+\S+\s+ON)\s+(%s)\b" % table,
+                    r"\1 %(val)s\2" % {"val": self._prefix},
+                ),
+                (r"\b(REFERENCES)\s+(%s)\b" % table, r"\1 %(val)s\2" % {"val": self._prefix}),
                 # EXISTS patterns
-                (rf"\b(EXISTS)\s+({table})\b", rf"\1 {self._prefix}\2"),
+                (r"\b(EXISTS)\s+(%s)\b" % table, r"\1 %(val)s\2" % {"val": self._prefix}),
                 (
-                    rf"\bEXISTS\s*\(\s*SELECT\s+.+?\s+FROM\s+({table})\b",
+                    r"\bEXISTS\s*\(\s*SELECT\s+.+?\s+FROM\s+(%s)\b" % table,
                     lambda m: m.group(0).replace(
-                        f"FROM {m.group(1)}", f"FROM {self._prefix}{m.group(1)}"
+                        "FROM %(val)s" % {"val": m.group(1)}, "FROM %(val)s{m.group(1)}" % {"val": self._prefix}
                     ),
                 ),
                 # Table name in WHERE clauses with table.column syntax
-                (rf"\b({table})\.(\w+)", rf"{self._prefix}\1.\2"),
+                (r"\b(%s)\.(\w+)" % table, r"%(val)s\1.\2" % {"val": self._prefix}),
             ]
 
             for pattern, replacement in patterns:
@@ -1356,49 +1358,49 @@ class CursorPrefixWrapper:
             patterns = [
                 # SELECT patterns - MUST handle queries without keywords before FROM
                 (
-                    rf"\bSELECT\s+(.+?)\s+FROM\s+({table})\b",
-                    lambda m: f"SELECT {m.group(1)} FROM {self._prefix}{m.group(2)}",
+                    r"\bSELECT\s+(.+?)\s+FROM\s+(%s)\b" % table,
+                    lambda m: "SELECT %(val)s FROM {self._prefix}{m.group(2)}" % {"val": m.group(1)},
                 ),
                 # Basic patterns with keywords before table name
-                (rf"\b(FROM)\s+({table})\b", rf"\1 {self._prefix}\2"),
-                (rf"\b(JOIN)\s+({table})\b", rf"\1 {self._prefix}\2"),
-                (rf"\b(INTO)\s+({table})\b", rf"\1 {self._prefix}\2"),
-                (rf"\b(UPDATE)\s+({table})\b", rf"\1 {self._prefix}\2"),
-                (rf"\b(DELETE\s+FROM)\s+({table})\b", rf"\1 {self._prefix}\2"),
-                (rf"\b(INSERT\s+INTO)\s+({table})\b", rf"\1 {self._prefix}\2"),
-                (rf"\b(ALTER\s+TABLE)\s+({table})\b", rf"\1 {self._prefix}\2"),
+                (r"\b(FROM)\s+(%s)\b" % table, r"\1 %(val)s\2" % {"val": self._prefix}),
+                (r"\b(JOIN)\s+(%s)\b" % table, r"\1 %(val)s\2" % {"val": self._prefix}),
+                (r"\b(INTO)\s+(%s)\b" % table, r"\1 %(val)s\2" % {"val": self._prefix}),
+                (r"\b(UPDATE)\s+(%s)\b" % table, r"\1 %(val)s\2" % {"val": self._prefix}),
+                (r"\b(DELETE\s+FROM)\s+(%s)\b" % table, r"\1 %(val)s\2" % {"val": self._prefix}),
+                (r"\b(INSERT\s+INTO)\s+(%s)\b" % table, r"\1 %(val)s\2" % {"val": self._prefix}),
+                (r"\b(ALTER\s+TABLE)\s+(%s)\b" % table, r"\1 %(val)s\2" % {"val": self._prefix}),
                 (
-                    rf"\b(DROP\s+TABLE\s+IF\s+EXISTS)\s+({table})\b",
-                    rf"\1 {self._prefix}\2",
+                    r"\b(DROP\s+TABLE\s+IF\s+EXISTS)\s+(%s)\b" % table,
+                    r"\1 %(val)s\2" % {"val": self._prefix},
                 ),
                 (
-                    rf"\b(CREATE\s+TABLE\s+IF\s+NOT\s+EXISTS)\s+({table})\b",
-                    rf"\1 {self._prefix}\2",
+                    r"\b(CREATE\s+TABLE\s+IF\s+NOT\s+EXISTS)\s+(%s)\b" % table,
+                    r"\1 %(val)s\2" % {"val": self._prefix},
                 ),
-                (rf"\b(CREATE\s+TABLE)\s+({table})\b", rf"\1 {self._prefix}\2"),
+                (r"\b(CREATE\s+TABLE)\s+(%s)\b" % table, r"\1 %(val)s\2" % {"val": self._prefix}),
                 (
-                    rf"\b(CREATE\s+INDEX\s+\S+\s+ON)\s+({table})\b",
-                    rf"\1 {self._prefix}\2",
-                ),
-                (
-                    rf"\b(CREATE\s+UNIQUE\s+INDEX\s+\S+\s+ON)\s+({table})\b",
-                    rf"\1 {self._prefix}\2",
+                    r"\b(CREATE\s+INDEX\s+\S+\s+ON)\s+(%s)\b" % table,
+                    r"\1 %(val)s\2" % {"val": self._prefix},
                 ),
                 (
-                    rf"\b(DROP\s+INDEX\s+IF\s+EXISTS\s+\S+\s+ON)\s+({table})\b",
-                    rf"\1 {self._prefix}\2",
+                    r"\b(CREATE\s+UNIQUE\s+INDEX\s+\S+\s+ON)\s+(%s)\b" % table,
+                    r"\1 %(val)s\2" % {"val": self._prefix},
                 ),
-                (rf"\b(REFERENCES)\s+({table})\b", rf"\1 {self._prefix}\2"),
+                (
+                    r"\b(DROP\s+INDEX\s+IF\s+EXISTS\s+\S+\s+ON)\s+(%s)\b" % table,
+                    r"\1 %(val)s\2" % {"val": self._prefix},
+                ),
+                (r"\b(REFERENCES)\s+(%s)\b" % table, r"\1 %(val)s\2" % {"val": self._prefix}),
                 # EXISTS patterns
-                (rf"\b(EXISTS)\s+({table})\b", rf"\1 {self._prefix}\2"),
+                (r"\b(EXISTS)\s+(%s)\b" % table, r"\1 %(val)s\2" % {"val": self._prefix}),
                 (
-                    rf"\bEXISTS\s*\(\s*SELECT\s+.+?\s+FROM\s+({table})\b",
+                    r"\bEXISTS\s*\(\s*SELECT\s+.+?\s+FROM\s+(%s)\b" % table,
                     lambda m: m.group(0).replace(
-                        f"FROM {m.group(1)}", f"FROM {self._prefix}{m.group(1)}"
+                        "FROM %(val)s" % {"val": m.group(1)}, "FROM %(val)s{m.group(1)}" % {"val": self._prefix}
                     ),
                 ),
                 # Table name in WHERE clauses with table.column syntax
-                (rf"\b({table})\.(\w+)", rf"{self._prefix}\1.\2"),
+                (r"\b(%s)\.(\w+)" % table, r"%(val)s\1.\2" % {"val": self._prefix}),
             ]
 
             for pattern, replacement in patterns:

@@ -101,7 +101,7 @@ class PostgreSQLSchema:
 
     def _table_name(self, base_name):
         """Get actual table name with prefix if in shared mode."""
-        return f"{self.table_prefix}{base_name}"
+        return "%s{base_name}" % self.table_prefix
 
     def check_and_init_schema(self):
         """
@@ -179,14 +179,14 @@ class PostgreSQLSchema:
         # Create indexes for references
         self.conn.execute(
             f"""
-            CREATE INDEX IF NOT EXISTS idx_reference_ref 
+            CREATE INDEX IF NOT EXISTS idx_reference_ref
                 ON {self._table_name('reference')} (ref_handle, ref_class)
         """
         )
 
         self.conn.execute(
             f"""
-            CREATE INDEX IF NOT EXISTS idx_reference_obj 
+            CREATE INDEX IF NOT EXISTS idx_reference_obj
                 ON {self._table_name('reference')} (obj_handle, obj_class)
         """
         )
@@ -271,7 +271,7 @@ class PostgreSQLSchema:
                         col_type = "VARCHAR(50)"
 
                     # Regular columns that will be updated by _update_secondary_values
-                    regular_columns.append(f"{col_name} {col_type}")
+                    regular_columns.append("%s {col_type}" % col_name)
 
             # Join column definitions
             regular_cols_sql = ""
@@ -304,7 +304,7 @@ class PostgreSQLSchema:
             # Create GIN index for general JSONB queries
             self.conn.execute(
                 f"""
-                CREATE INDEX IF NOT EXISTS idx_{self.table_prefix}{obj_type}_json 
+                CREATE INDEX IF NOT EXISTS idx_{self.table_prefix}{obj_type}_json
                     ON {self._table_name(obj_type)} USING GIN (json_data)
             """
             )
@@ -332,7 +332,7 @@ class PostgreSQLSchema:
             # Name searches
             self.conn.execute(
                 f"""
-                CREATE INDEX IF NOT EXISTS idx_{self.table_prefix}person_names 
+                CREATE INDEX IF NOT EXISTS idx_{self.table_prefix}person_names
                     ON {self._table_name('person')} USING GIN ((json_data->'names'))
             """
             )
@@ -340,8 +340,8 @@ class PostgreSQLSchema:
             # Birth/death dates
             self.conn.execute(
                 f"""
-                CREATE INDEX IF NOT EXISTS idx_{self.table_prefix}person_birth_date 
-                    ON {self._table_name('person')} 
+                CREATE INDEX IF NOT EXISTS idx_{self.table_prefix}person_birth_date
+                    ON {self._table_name('person')}
                     ((json_data->'birth_ref_index'->>'date'))
             """
             )
@@ -350,8 +350,8 @@ class PostgreSQLSchema:
             # Parent searches
             self.conn.execute(
                 f"""
-                CREATE INDEX IF NOT EXISTS idx_{self.table_prefix}family_parents 
-                    ON {self._table_name('family')} 
+                CREATE INDEX IF NOT EXISTS idx_{self.table_prefix}family_parents
+                    ON {self._table_name('family')}
                     USING GIN ((json_data->'parent_handles'))
             """
             )
@@ -360,8 +360,8 @@ class PostgreSQLSchema:
             # Event type and date
             self.conn.execute(
                 f"""
-                CREATE INDEX IF NOT EXISTS idx_{self.table_prefix}event_type_date 
-                    ON {self._table_name('event')} 
+                CREATE INDEX IF NOT EXISTS idx_{self.table_prefix}event_type_date
+                    ON {self._table_name('event')}
                     ((json_data->>'type'), (json_data->>'date'))
             """
             )
@@ -370,8 +370,8 @@ class PostgreSQLSchema:
             # Place hierarchy
             self.conn.execute(
                 f"""
-                CREATE INDEX IF NOT EXISTS idx_{self.table_prefix}place_hierarchy 
-                    ON {self._table_name('place')} 
+                CREATE INDEX IF NOT EXISTS idx_{self.table_prefix}place_hierarchy
+                    ON {self._table_name('place')}
                     USING GIN ((json_data->'placeref_list'))
             """
             )
@@ -380,7 +380,7 @@ class PostgreSQLSchema:
             # Source title
             self.conn.execute(
                 f"""
-                CREATE INDEX IF NOT EXISTS idx_{self.table_prefix}source_title 
+                CREATE INDEX IF NOT EXISTS idx_{self.table_prefix}source_title
                     ON {self._table_name('source')} ((json_data->>'title'))
             """
             )
@@ -400,7 +400,7 @@ class PostgreSQLSchema:
                     self.conn.execute(
                         f"""
                         CREATE INDEX IF NOT EXISTS idx_{self.table_prefix}note_text_trgm
-                            ON {self._table_name('note')} USING GIN 
+                            ON {self._table_name('note')} USING GIN
                             ((json_data->>'text') gin_trgm_ops)
                     """
                     )
@@ -441,7 +441,7 @@ class PostgreSQLSchema:
                 SELECT jsonb_array_elements_text(f.json_data->'parent_handles'), 'parent'::TEXT
                 FROM family f
                 WHERE f.handle = family_handle;
-                
+
                 -- Get children
                 RETURN QUERY
                 SELECT jsonb_array_elements_text(f.json_data->'child_ref_list'), 'child'::TEXT
@@ -467,7 +467,7 @@ class PostgreSQLSchema:
         for ext_name, description in extensions:
             if self._check_extension_available(ext_name):
                 try:
-                    self.conn.execute(f"CREATE EXTENSION IF NOT EXISTS {ext_name}")
+                    self.conn.execute("CREATE EXTENSION IF NOT EXISTS %s" % ext_name)
                     self.log.info("Enabled %s extension: %s", ext_name, description)
                 except Exception as e:
                     self.log.debug("Could not enable %s: %s", ext_name, e)
@@ -476,7 +476,7 @@ class PostgreSQLSchema:
         """Check if a PostgreSQL extension is available."""
         self.conn.execute(
             """
-            SELECT COUNT(*) FROM pg_available_extensions 
+            SELECT COUNT(*) FROM pg_available_extensions
             WHERE name = %s
         """,
             [extension_name],
@@ -486,7 +486,7 @@ class PostgreSQLSchema:
     def _get_schema_version(self):
         """Get current schema version from metadata."""
         self.conn.execute(
-            f"SELECT value FROM {self._table_name('metadata')} WHERE setting = 'schema_version'"
+            "SELECT value FROM %s WHERE setting = 'schema_version'" % self._table_name('metadata')
         )
         row = self.conn.fetchone()
         if row and row[0]:
@@ -545,9 +545,9 @@ class PostgreSQLSchema:
         # Get table information
         self.conn.execute(
             """
-            SELECT table_name, 
+            SELECT table_name,
                    pg_size_pretty(pg_total_relation_size(table_schema||'.'||table_name)) as size,
-                   (SELECT COUNT(*) FROM information_schema.columns c 
+                   (SELECT COUNT(*) FROM information_schema.columns c
                     WHERE c.table_name = t.table_name) as column_count
             FROM information_schema.tables t
             WHERE table_schema = 'public'
