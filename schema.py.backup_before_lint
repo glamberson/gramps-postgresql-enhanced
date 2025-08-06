@@ -101,7 +101,7 @@ class PostgreSQLSchema:
 
     def _table_name(self, base_name):
         """Get actual table name with prefix if in shared mode."""
-        return "%s{base_name}" % self.table_prefix
+        return f"{self.table_prefix}{base_name}"
 
     def check_and_init_schema(self):
         """
@@ -271,7 +271,7 @@ class PostgreSQLSchema:
                         col_type = "VARCHAR(50)"
 
                     # Regular columns that will be updated by _update_secondary_values
-                    regular_columns.append("%s {col_type}" % col_name)
+                    regular_columns.append(f"{col_name} {col_type}")
 
             # Join column definitions
             regular_cols_sql = ""
@@ -467,7 +467,7 @@ class PostgreSQLSchema:
         for ext_name, description in extensions:
             if self._check_extension_available(ext_name):
                 try:
-                    self.conn.execute("CREATE EXTENSION IF NOT EXISTS %s" % ext_name)
+                    self.conn.execute(f"CREATE EXTENSION IF NOT EXISTS {ext_name}")
                     self.log.info("Enabled %s extension: %s", ext_name, description)
                 except Exception as e:
                     self.log.debug("Could not enable %s: %s", ext_name, e)
@@ -486,7 +486,7 @@ class PostgreSQLSchema:
     def _get_schema_version(self):
         """Get current schema version from metadata."""
         self.conn.execute(
-            "SELECT value FROM %s WHERE setting = 'schema_version'" % self._table_name('metadata')
+            f"SELECT value FROM {self._table_name('metadata')} WHERE setting = 'schema_version'"
         )
         row = self.conn.fetchone()
         if row and row[0]:

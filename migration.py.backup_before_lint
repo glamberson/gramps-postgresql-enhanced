@@ -119,7 +119,7 @@ class MigrationManager:
         # Check if JSONB columns are empty
         self.conn.execute(
             """
-            SELECT COUNT(*) FROM person
+            SELECT COUNT(*) FROM person 
             WHERE json_data IS NOT NULL
         """
         )
@@ -159,7 +159,7 @@ class MigrationManager:
             # Calculate total objects
             total_objects = 0
             for obj_type in OBJECT_TYPES:
-                cursor = source.execute("SELECT COUNT(*) FROM %s" % obj_type)
+                cursor = source.execute(f"SELECT COUNT(*) FROM {obj_type}")
                 count = cursor.fetchone()[0]
                 total_objects += count
                 stats["objects_migrated"][obj_type] = 0
@@ -179,7 +179,7 @@ class MigrationManager:
                         callback(
                             current,
                             total_objects,
-                            _("Migrating %s objects..." % obj_type),
+                            _(f"Migrating {obj_type} objects..."),
                         )
 
                     count = self._migrate_object_type(source, obj_type)
@@ -190,7 +190,7 @@ class MigrationManager:
                         callback(
                             current,
                             total_objects,
-                            _("Migrated %s {obj_type} objects" % count),
+                            _(f"Migrated {count} {obj_type} objects"),
                         )
 
                 # Migrate metadata
@@ -341,7 +341,7 @@ class MigrationManager:
         """Migrate reference table."""
         cursor = source.execute(
             """
-            SELECT obj_handle, obj_class, ref_handle, ref_class
+            SELECT obj_handle, obj_class, ref_handle, ref_class 
             FROM reference
         """
         )
@@ -349,7 +349,7 @@ class MigrationManager:
         for row in cursor:
             self.conn.execute(
                 """
-                INSERT INTO reference
+                INSERT INTO reference 
                 (obj_handle, obj_class, ref_handle, ref_class)
                 VALUES (%s, %s, %s, %s)
                 ON CONFLICT DO NOTHING
@@ -369,7 +369,7 @@ class MigrationManager:
         if self._table_exists_in_sqlite(source, "gender_stats"):
             cursor = source.execute(
                 """
-                SELECT given_name, male, female, unknown
+                SELECT given_name, male, female, unknown 
                 FROM gender_stats
             """
             )
@@ -377,7 +377,7 @@ class MigrationManager:
             for row in cursor:
                 self.conn.execute(
                     """
-                    INSERT INTO gender_stats
+                    INSERT INTO gender_stats 
                     (given_name, male, female, unknown)
                     VALUES (%s, %s, %s, %s)
                     ON CONFLICT (given_name) DO UPDATE
@@ -407,7 +407,7 @@ class MigrationManager:
         """Check if a table exists in SQLite database."""
         cursor = connection.execute(
             """
-            SELECT COUNT(*) FROM sqlite_master
+            SELECT COUNT(*) FROM sqlite_master 
             WHERE type='table' AND name=?
         """,
             [table_name],
@@ -430,7 +430,7 @@ class MigrationManager:
         # Calculate total objects
         total_objects = 0
         for obj_type in OBJECT_TYPES:
-            self.conn.execute("SELECT COUNT(*) FROM %s" % obj_type)
+            self.conn.execute(f"SELECT COUNT(*) FROM {obj_type}")
             count = self.conn.fetchone()[0]
             total_objects += count
 
@@ -467,7 +467,7 @@ class MigrationManager:
         # Populate JSONB from blob data
         for obj_type in OBJECT_TYPES:
             if callback:
-                callback(current, total_objects, _("Upgrading %s objects..." % obj_type))
+                callback(current, total_objects, _(f"Upgrading {obj_type} objects..."))
 
             count = self._upgrade_object_type(obj_type)
             stats["objects_upgraded"][obj_type] = count
@@ -500,9 +500,9 @@ class MigrationManager:
         # Get all objects with blob data but no JSON
         self.conn.execute(
             f"""
-            SELECT handle, blob_data
+            SELECT handle, blob_data 
             FROM {obj_type}
-            WHERE blob_data IS NOT NULL
+            WHERE blob_data IS NOT NULL 
             AND json_data IS NULL
         """
         )
@@ -546,7 +546,7 @@ class MigrationManager:
             # Check blob vs JSON counts
             self.conn.execute(
                 f"""
-                SELECT
+                SELECT 
                     COUNT(*) as total,
                     COUNT(blob_data) as blob_count,
                     COUNT(json_data) as json_count
@@ -566,8 +566,8 @@ class MigrationManager:
             if blob_count != json_count:
                 results["valid"] = False
                 results["errors"].append(
-                    "%s: blob_count ({blob_count}) != " % obj_type
-                    "json_count (%s)" % json_count
+                    f"{obj_type}: blob_count ({blob_count}) != "
+                    f"json_count ({json_count})"
                 )
 
         return results

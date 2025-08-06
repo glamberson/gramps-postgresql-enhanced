@@ -146,11 +146,11 @@ class PostgreSQLConnection:
             port = parts[1] or "5432"
             dbname = parts[2]
 
-            conninfo = "host=%s port={port} dbname={dbname}" % host
+            conninfo = f"host={host} port={port} dbname={dbname}"
             if username:
-                conninfo += " user=%s" % username
+                conninfo += f" user={username}"
             if password:
-                conninfo += " password=%s" % password
+                conninfo += f" password={password}"
 
             # Handle schema if provided
             if len(parts) > 3:
@@ -165,12 +165,12 @@ class PostgreSQLConnection:
                 conninfo = connection_info
             else:
                 # Just a database name
-                conninfo = "dbname=%s" % connection_info
+                conninfo = f"dbname={connection_info}"
 
             if username:
-                conninfo += " user=%s" % username
+                conninfo += f" user={username}"
             if password:
-                conninfo += " password=%s" % password
+                conninfo += f" password={password}"
             options["schema"] = "public"
 
         # Add any environment variables not already in conninfo
@@ -200,7 +200,7 @@ class PostgreSQLConnection:
 
         for env_var, param in env_mapping.items():
             if env_var in os.environ and param not in conninfo:
-                conninfo += " %s={os.environ[env_var]}" % param
+                conninfo += f" {param}={os.environ[env_var]}"
 
         return conninfo
 
@@ -422,7 +422,7 @@ class PostgreSQLConnection:
                 count = "ALL"
             query = re.sub(
                 r"LIMIT\s+\d+\s*,\s*-?\d+",
-                "LIMIT %s OFFSET {offset}" % count,
+                f"LIMIT {count} OFFSET {offset}",
                 query,
                 flags=re.IGNORECASE,
             )
@@ -508,22 +508,22 @@ class PostgreSQLConnection:
         track this for savepoint support.
         """
         # Create a savepoint for nested transaction support
-        savepoint_name = "sp_%s" % len(self._savepoints)
-        self.execute("SAVEPOINT %s" % savepoint_name)
+        savepoint_name = f"sp_{len(self._savepoints)}"
+        self.execute(f"SAVEPOINT {savepoint_name}")
         self._savepoints.append(savepoint_name)
 
     def begin_savepoint(self, name=None):
         """Create a named savepoint."""
         if not name:
-            name = "sp_%s" % len(self._savepoints)
-        self.execute("SAVEPOINT %s" % name)
+            name = f"sp_{len(self._savepoints)}"
+        self.execute(f"SAVEPOINT {name}")
         self._savepoints.append(name)
         return name
 
     def rollback_savepoint(self, name):
         """Rollback to a specific savepoint."""
         if name in self._savepoints:
-            self.execute("ROLLBACK TO SAVEPOINT %s" % name)
+            self.execute(f"ROLLBACK TO SAVEPOINT {name}")
             # Remove this and all later savepoints
             idx = self._savepoints.index(name)
             self._savepoints = self._savepoints[:idx]
@@ -637,7 +637,7 @@ class PostgreSQLConnection:
         if self._connection:
             return getattr(self._connection, name)
         raise AttributeError(
-            "'%s' object has no attribute '{name}'" % self.__class__.__name__
+            f"'{self.__class__.__name__}' object has no attribute '{name}'"
         )
 
 

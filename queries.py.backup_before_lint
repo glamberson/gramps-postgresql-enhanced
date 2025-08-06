@@ -85,14 +85,14 @@ class EnhancedQueries:
         :rtype: list
         """
         query = """
-        WITH RECURSIVE
+        WITH RECURSIVE 
         -- Ancestors of person 1
         ancestors1 AS (
             SELECT handle, 0 as generation
             FROM person WHERE handle = %s
-
+            
             UNION ALL
-
+            
             SELECT DISTINCT p.handle, a.generation + 1
             FROM ancestors1 a
             JOIN person p ON p.handle IN (
@@ -109,9 +109,9 @@ class EnhancedQueries:
         ancestors2 AS (
             SELECT handle, 0 as generation
             FROM person WHERE handle = %s
-
+            
             UNION ALL
-
+            
             SELECT DISTINCT p.handle, a.generation + 1
             FROM ancestors2 a
             JOIN person p ON p.handle IN (
@@ -125,7 +125,7 @@ class EnhancedQueries:
             WHERE a.generation < %s
         )
         -- Find common ancestors
-        SELECT
+        SELECT 
             a1.handle,
             a1.generation as gen_from_person1,
             a2.generation as gen_from_person2,
@@ -162,27 +162,27 @@ class EnhancedQueries:
         query = """
         WITH RECURSIVE relationship_graph AS (
             -- Start from person 1
-            SELECT
+            SELECT 
                 handle,
                 ARRAY[handle] as path,
                 0 as depth,
                 false as found
-            FROM person
+            FROM person 
             WHERE handle = %s
-
+            
             UNION ALL
-
+            
             SELECT DISTINCT
-                CASE
+                CASE 
                     WHEN f.json_data->'parent_handles' ? r.handle THEN child
                     ELSE parent
                 END as handle,
-                r.path || CASE
+                r.path || CASE 
                     WHEN f.json_data->'parent_handles' ? r.handle THEN child
                     ELSE parent
                 END as path,
                 r.depth + 1,
-                CASE
+                CASE 
                     WHEN f.json_data->'parent_handles' ? r.handle THEN child = %s
                     ELSE parent = %s
                 END as found
@@ -199,7 +199,7 @@ class EnhancedQueries:
             ) children
             WHERE r.depth < %s
             AND NOT r.found
-            AND NOT (r.path @> ARRAY[CASE
+            AND NOT (r.path @> ARRAY[CASE 
                 WHEN f.json_data->'parent_handles' ? r.handle THEN child
                 ELSE parent
             END])
@@ -234,14 +234,14 @@ class EnhancedQueries:
 
         # Search in person names
         query = """
-        SELECT 'person' as obj_type, handle,
+        SELECT 'person' as obj_type, handle, 
                json_data->>'gramps_id' as gramps_id,
                jsonb_pretty(json_data->'names') as context
         FROM person
         WHERE json_data::text ILIKE %s
         LIMIT %s
         """
-        search_pattern = "%%s%" % search_term
+        search_pattern = f"%{search_term}%"
         self.conn.execute(query, [search_pattern, limit])
         results.extend(self.conn.fetchall())
 
@@ -285,18 +285,18 @@ class EnhancedQueries:
         query = """
         WITH RECURSIVE descendants AS (
             -- Root person
-            SELECT
+            SELECT 
                 p.handle,
                 p.json_data,
                 0 as generation,
                 ARRAY[p.handle] as path
             FROM person p
             WHERE p.handle = %s
-
+            
             UNION ALL
-
+            
             -- Children
-            SELECT
+            SELECT 
                 p.handle,
                 p.json_data,
                 d.generation + 1,
@@ -308,7 +308,7 @@ class EnhancedQueries:
             )
             WHERE d.generation < %s
         )
-        SELECT
+        SELECT 
             handle,
             generation,
             path,
@@ -333,7 +333,7 @@ class EnhancedQueries:
                 node = {
                     "handle": row[0],
                     "gramps_id": row[3],
-                    "name": "%s {row[5] or ''}" % row[4] or ''.strip(),
+                    "name": f"{row[4] or ''} {row[5] or ''}".strip(),
                     "birth_date": row[6],
                     "death_date": row[7],
                     "generation": row[1],
@@ -364,7 +364,7 @@ class EnhancedQueries:
             raise RuntimeError(_("pg_trgm extension required for duplicate detection"))
 
         query = """
-        SELECT
+        SELECT 
             p1.handle as handle1,
             p2.handle as handle2,
             p1.json_data->>'gramps_id' as id1,
@@ -374,17 +374,17 @@ class EnhancedQueries:
             p2.json_data->'names'->0->>'first_name' as first2,
             p2.json_data->'names'->0->>'surname' as surname2,
             similarity(
-                p1.json_data->'names'->0->>'first_name' || ' ' ||
+                p1.json_data->'names'->0->>'first_name' || ' ' || 
                 p1.json_data->'names'->0->>'surname',
-                p2.json_data->'names'->0->>'first_name' || ' ' ||
+                p2.json_data->'names'->0->>'first_name' || ' ' || 
                 p2.json_data->'names'->0->>'surname'
             ) as name_similarity
         FROM person p1
         JOIN person p2 ON p1.handle < p2.handle
         WHERE similarity(
-            p1.json_data->'names'->0->>'first_name' || ' ' ||
+            p1.json_data->'names'->0->>'first_name' || ' ' || 
             p1.json_data->'names'->0->>'surname',
-            p2.json_data->'names'->0->>'first_name' || ' ' ||
+            p2.json_data->'names'->0->>'first_name' || ' ' || 
             p2.json_data->'names'->0->>'surname'
         ) > %s
         ORDER BY name_similarity DESC
@@ -414,13 +414,13 @@ class EnhancedQueries:
             "note",
             "tag",
         ]:
-            self.conn.execute("SELECT COUNT(*) FROM %s" % obj_type)
-            stats["%s_count" % obj_type] = self.conn.fetchone()[0]
+            self.conn.execute(f"SELECT COUNT(*) FROM {obj_type}")
+            stats[f"{obj_type}_count"] = self.conn.fetchone()[0]
 
         # Gender distribution
         self.conn.execute(
             """
-            SELECT
+            SELECT 
                 json_data->>'gender' as gender,
                 COUNT(*) as count
             FROM person
@@ -433,7 +433,7 @@ class EnhancedQueries:
         # Century distribution
         self.conn.execute(
             """
-            SELECT
+            SELECT 
                 SUBSTRING(json_data->'birth_ref_index'->>'date', 1, 2) || '00' as century,
                 COUNT(*) as count
             FROM person
@@ -447,7 +447,7 @@ class EnhancedQueries:
         # Most common surnames
         self.conn.execute(
             """
-            SELECT
+            SELECT 
                 json_data->'names'->0->>'surname' as surname,
                 COUNT(*) as count
             FROM person
@@ -462,7 +462,7 @@ class EnhancedQueries:
         # Average family size
         self.conn.execute(
             """
-            SELECT
+            SELECT 
                 AVG(jsonb_array_length(json_data->'child_ref_list')) as avg_children
             FROM family
             WHERE json_data->'child_ref_list' IS NOT NULL
