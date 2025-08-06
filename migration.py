@@ -566,8 +566,9 @@ class MigrationManager:
             if blob_count != json_count:
                 results["valid"] = False
                 results["errors"].append(
-                    "%s: blob_count ({blob_count}) != " % obj_type
-                    "json_count (%s)" % json_count
+                    "%s: blob_count (%s) != json_count (%s)" % (
+                        obj_type, blob_count, json_count
+                    )
                 )
 
         return results
