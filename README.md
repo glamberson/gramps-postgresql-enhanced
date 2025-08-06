@@ -571,7 +571,7 @@ GNU General Public License v2 or later
 
 ## Author
 
-Greg Lamberson - lamberson@yahoo.com
+Greg Lamberson - greg@aigenealogyinsights.com
 
 ## Acknowledgments
 
