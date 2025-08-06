@@ -1076,7 +1076,7 @@ class PostgreSQLEnhanced(DBAPI):
         if hasattr(self, "table_prefix") and self.table_prefix:
             # In monolithic mode, use prefixed table name
             self.dbapi.execute(
-                "SELECT 1 FROM %(val)smetadata WHERE setting = %s" % {"val": self.table_prefix}, [key]
+                f"SELECT 1 FROM {self.table_prefix}metadata WHERE setting = %s", [key]
             )
         else:
             # In separate mode, use standard query
@@ -1089,7 +1089,7 @@ class PostgreSQLEnhanced(DBAPI):
                 else ""
             )
             self.dbapi.execute(
-                "SELECT value FROM %smetadata WHERE setting = %s" % prefix,
+                f"SELECT value FROM {prefix}metadata WHERE setting = %s",
                 [key],
             )
             row = self.dbapi.fetchone()
