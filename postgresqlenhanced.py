@@ -254,9 +254,9 @@ class PostgreSQLEnhanced(DBAPI):
                     # Format size nicely
                     size_mb = stats[0] / (1024 * 1024)
                     if size_mb < 1024:
-                        size_str = "%(val)s MB" % {"val": size_mb:.1f}
+                        size_str = "%(val)s MB" % {"val": round(size_mb, 1)}
                     else:
-                        size_str = "%(val)s GB" % {"val": size_mb/1024:.1f}
+                        size_str = "%(val)s GB" % {"val": round(size_mb/1024, 1)}
 
                     summary[_("Database size")] = size_str
                     if stats[1] is not None:
