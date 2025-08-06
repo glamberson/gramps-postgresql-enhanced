@@ -1,0 +1,14 @@
+95,000 people means approximately:
+- 95,000 person records
+- ~40,000-50,000 families (assuming ~2.3 people per family average)
+- ~300,000-500,000 events (3-5 events per person average)
+- ~100,000+ citations
+- ~50,000+ places
+- Millions of relationship links
+
+At ~400-500 bytes per person in GEDCOM format, that's about right for 40MB.
+
+With full debug logging, expect:
+- Log file: 5-10 GB
+- Import time: 30-60 minutes
+- PostgreSQL will handle this much better than SQLite would
