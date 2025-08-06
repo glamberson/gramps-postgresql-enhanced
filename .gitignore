@@ -42,5 +42,16 @@ pg_dump_*
 
 # Local development
 .env
+.venv/
+venv/
+lint_env/
 local_settings.py
 test_db_config.py
+connection_info.txt
+
+# Logs
+*.log
+debug.txt
+
+# Distribution packages
+*.addon.tgz
