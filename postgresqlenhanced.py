@@ -431,7 +431,6 @@ class PostgreSQLEnhanced(DBAPI):
         return True
 
     def load(
-        """Perform load operation."""
         self,
         directory,
         _callback=None,
