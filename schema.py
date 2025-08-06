@@ -139,7 +139,7 @@ class PostgreSQLSchema:
             # Enhanced metadata with JSON support
             # JSONSerializer expects json_data column for metadata
             self.conn.execute(
-                """
+                f"""
                 CREATE TABLE IF NOT EXISTS {self._table_name('metadata')} (
                     setting VARCHAR(255) PRIMARY KEY,
                     value BYTEA,  -- Keep for compatibility
@@ -151,7 +151,7 @@ class PostgreSQLSchema:
         else:
             # Basic metadata (blob only)
             self.conn.execute(
-                """
+                f"""
                 CREATE TABLE IF NOT EXISTS {self._table_name('metadata')} (
                     setting VARCHAR(255) PRIMARY KEY,
                     value BYTEA
@@ -165,7 +165,7 @@ class PostgreSQLSchema:
 
         # Create reference table (for backlinks)
         self.conn.execute(
-            """
+            f"""
             CREATE TABLE IF NOT EXISTS {self._table_name('reference')} (
                 obj_handle VARCHAR(50),
                 obj_class VARCHAR(50),
@@ -178,14 +178,14 @@ class PostgreSQLSchema:
 
         # Create indexes for references
         self.conn.execute(
-            """
+            f"""
             CREATE INDEX IF NOT EXISTS idx_reference_ref
                 ON {self._table_name('reference')} (ref_handle, ref_class)
         """
         )
 
         self.conn.execute(
-            """
+            f"""
             CREATE INDEX IF NOT EXISTS idx_reference_obj
                 ON {self._table_name('reference')} (obj_handle, obj_class)
         """
@@ -193,7 +193,7 @@ class PostgreSQLSchema:
 
         # Create gender stats table
         self.conn.execute(
-            """
+            f"""
             CREATE TABLE IF NOT EXISTS {self._table_name('gender_stats')} (
                 given_name VARCHAR(255) PRIMARY KEY,
                 male INTEGER DEFAULT 0,
@@ -282,7 +282,7 @@ class PostgreSQLSchema:
                 )
 
             self.conn.execute(
-                """
+                f"""
                 CREATE TABLE IF NOT EXISTS {self._table_name(obj_type)} (
                     handle VARCHAR(50) PRIMARY KEY,
                     json_data JSONB NOT NULL,  -- JSONSerializer stores here
@@ -295,7 +295,7 @@ class PostgreSQLSchema:
             if obj_type in REQUIRED_INDEXES:
                 for column in REQUIRED_INDEXES[obj_type]:
                     self.conn.execute(
-                        """
+                        f"""
                         CREATE INDEX IF NOT EXISTS idx_{self.table_prefix}{obj_type}_{column}
                         ON {self._table_name(obj_type)} ({column})
                     """
@@ -303,7 +303,7 @@ class PostgreSQLSchema:
 
             # Create GIN index for general JSONB queries
             self.conn.execute(
-                """
+                f"""
                 CREATE INDEX IF NOT EXISTS idx_{self.table_prefix}{obj_type}_json
                     ON {self._table_name(obj_type)} USING GIN (json_data)
             """
@@ -315,7 +315,7 @@ class PostgreSQLSchema:
         else:
             # Basic table (blob only)
             self.conn.execute(
-                """
+                f"""
                 CREATE TABLE IF NOT EXISTS {self._table_name(obj_type)} (
                     handle VARCHAR(50) PRIMARY KEY,
                     blob_data BYTEA
@@ -331,7 +331,7 @@ class PostgreSQLSchema:
         if obj_type == "person":
             # Name searches
             self.conn.execute(
-                """
+                f"""
                 CREATE INDEX IF NOT EXISTS idx_{self.table_prefix}person_names
                     ON {self._table_name('person')} USING GIN ((json_data->'names'))
             """
@@ -339,7 +339,7 @@ class PostgreSQLSchema:
 
             # Birth/death dates
             self.conn.execute(
-                """
+                f"""
                 CREATE INDEX IF NOT EXISTS idx_{self.table_prefix}person_birth_date
                     ON {self._table_name('person')}
                     ((json_data->'birth_ref_index'->>'date'))
@@ -349,7 +349,7 @@ class PostgreSQLSchema:
         elif obj_type == "family":
             # Parent searches
             self.conn.execute(
-                """
+                f"""
                 CREATE INDEX IF NOT EXISTS idx_{self.table_prefix}family_parents
                     ON {self._table_name('family')}
                     USING GIN ((json_data->'parent_handles'))
@@ -359,7 +359,7 @@ class PostgreSQLSchema:
         elif obj_type == "event":
             # Event type and date
             self.conn.execute(
-                """
+                f"""
                 CREATE INDEX IF NOT EXISTS idx_{self.table_prefix}event_type_date
                     ON {self._table_name('event')}
                     ((json_data->>'type'), (json_data->>'date'))
@@ -369,7 +369,7 @@ class PostgreSQLSchema:
         elif obj_type == "place":
             # Place hierarchy
             self.conn.execute(
-                """
+                f"""
                 CREATE INDEX IF NOT EXISTS idx_{self.table_prefix}place_hierarchy
                     ON {self._table_name('place')}
                     USING GIN ((json_data->'placeref_list'))
@@ -379,7 +379,7 @@ class PostgreSQLSchema:
         elif obj_type == "source":
             # Source title
             self.conn.execute(
-                """
+                f"""
                 CREATE INDEX IF NOT EXISTS idx_{self.table_prefix}source_title
                     ON {self._table_name('source')} ((json_data->>'title'))
             """
@@ -398,7 +398,7 @@ class PostgreSQLSchema:
                 )
                 if cur.fetchone()[0]:
                     self.conn.execute(
-                        """
+                        f"""
                         CREATE INDEX IF NOT EXISTS idx_{self.table_prefix}note_text_trgm
                             ON {self._table_name('note')} USING GIN
                             ((json_data->>'text') gin_trgm_ops)
@@ -497,7 +497,7 @@ class PostgreSQLSchema:
         """Set schema version in metadata."""
         if self.use_jsonb:
             self.conn.execute(
-                """
+                f"""
                 INSERT INTO {self._table_name('metadata')} (setting, value, json_data)
                 VALUES ('schema_version', %s, %s)
                 ON CONFLICT (setting) DO UPDATE
@@ -509,7 +509,7 @@ class PostgreSQLSchema:
             )
         else:
             self.conn.execute(
-                """
+                f"""
                 INSERT INTO {self._table_name('metadata')} (setting, value)
                 VALUES ('schema_version', %s)
                 ON CONFLICT (setting) DO UPDATE
