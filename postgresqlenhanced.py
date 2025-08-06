@@ -334,7 +334,10 @@ class PostgreSQLEnhanced(DBAPI):
                 # Shared database with table prefixes
                 db_name = config.get("shared_database_name", "gramps_shared")
                 # Sanitize tree name for use as table prefix
-                self.table_prefix = re.sub(r"[^a-zA-Z0-9_]", "_", tree_name) + "_"
+                # Ensure prefix starts with 'tree_' to avoid PostgreSQL identifier issues
+                # (identifiers can't start with numbers)
+                safe_tree_name = re.sub(r"[^a-zA-Z0-9_]", "_", tree_name)
+                self.table_prefix = f"tree_{safe_tree_name}_"
                 self.shared_db_mode = True
                 LOG.info(
                     "Using shared database mode with prefix: %s", self.table_prefix
@@ -485,15 +488,52 @@ class PostgreSQLEnhanced(DBAPI):
         # Set proper version to avoid upgrade prompts
         self._set_metadata("version", "21")
 
+    def _read_config_file(self, config_path):
+        """
+        Read a connection_info.txt file.
+        
+        :param config_path: Path to config file
+        :type config_path: str
+        :returns: Dictionary of configuration values
+        :rtype: dict
+        """
+        config = {}
+        if os.path.exists(config_path):
+            with open(config_path, "r", encoding="utf-8") as f:
+                for line in f:
+                    line = line.strip()
+                    if line and not line.startswith("#") and "=" in line:
+                        key, value = line.split("=", 1)
+                        config[key.strip()] = value.strip()
+        return config
+
     def _load_connection_config(self, directory):
         """
         Load connection configuration from connection_info.txt.
+        
+        Priority order:
+        1. Central plugin config (for monolithic mode)
+        2. Per-tree config (for separate mode)
+        3. Defaults
 
         :param directory: Path to the database directory containing config file
         :type directory: str
         :returns: Dictionary containing connection configuration
         :rtype: dict
         """
+        # First, try central config location
+        plugin_dir = os.path.dirname(os.path.abspath(__file__))
+        central_config_path = os.path.join(plugin_dir, "connection_info.txt")
+        
+        # Check if central config exists and what mode it specifies
+        if os.path.exists(central_config_path):
+            central_config = self._read_config_file(central_config_path)
+            if central_config.get("database_mode") == "monolithic":
+                # In monolithic mode, ALWAYS use central config
+                LOG.info("Using central config for monolithic mode from %s", central_config_path)
+                return central_config
+        
+        # For separate mode or if no central config, check per-tree config
         config_path = os.path.join(directory, "connection_info.txt")
         config = {
             "host": "localhost",
@@ -784,7 +824,7 @@ class PostgreSQLEnhanced(DBAPI):
 
         return stats
 
-    def commit_person(self, person, trans):
+    def commit_person(self, person, trans, change_time=None):
         """
         Override commit_person to handle NULL first names gracefully.
         
@@ -809,8 +849,8 @@ class PostgreSQLEnhanced(DBAPI):
         # Temporarily patch the function
         genderstats._get_key_from_name = patched_get_key_from_name
         try:
-            # Call the parent method with the patched function
-            super().commit_person(person, trans)
+            # Call the parent method with the patched function and change_time
+            super().commit_person(person, trans, change_time)
         finally:
             # Restore the original function
             genderstats._get_key_from_name = original_get_key_from_name
