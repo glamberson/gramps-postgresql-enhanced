@@ -11,18 +11,20 @@ The PostgreSQL Enhanced addon provides a professional-grade database backend for
 ## Key Features
 
 ### Core Capabilities
-- **Modern psycopg3** - Uses the latest PostgreSQL adapter (psycopg 3.1+, not psycopg2)
+
+- **Modern psycopg3** - Uses the latest PostgreSQL adapter (psycopg 3, not psycopg2)
 - **Dual Storage Format** - Maintains both pickle blobs (for Gramps compatibility) and JSONB (for advanced queries)
 - **Two Database Modes** - Both fully tested and working:
   - **Monolithic Mode** - All family trees in one database with table prefixes
   - **Separate Mode** - Each family tree gets its own PostgreSQL database
 - **Full Gramps Compatibility** - Works with all existing Gramps tools and reports
 - **Transaction Safety** - Proper savepoint handling and rollback capabilities
-- **Data Preservation** - Intelligent design that preserves data when trees are removed from Gramps
+- **Data Preservation** - Intelligent design that preserves data when trees are removed from Gramps 
 
 ### Performance Advantages
 
 #### Compared to SQLite Backend
+
 - **3-10x faster** for most operations
 - **12x faster** person lookups (6,135/sec vs 500/sec)
 - **100x faster** name searches using indexes instead of full scans
@@ -31,15 +33,17 @@ The PostgreSQL Enhanced addon provides a professional-grade database backend for
 - **Handles 100,000+ persons** effortlessly where SQLite struggles
 
 #### Compared to Original PostgreSQL Addon
+
 - **Modern psycopg3** instead of deprecated psycopg2
 - **JSONB storage** enables advanced queries impossible with blob-only storage
 - **Connection pooling** for better resource management
 - **Recursive CTEs** for relationship path finding
-- **Full-text search** capabilities with proper indexing
+- **Full-text search** capabilities with proper indexing (future)
 - **Better NULL handling** - Fixes issues in original implementation
 - **Table prefix support** - Allows multiple trees in one database
 
-### Advanced Query Capabilities
+### Advanced Query Capabilities (future)
+
 - **Relationship path finding** - Find connections between any two people
 - **Common ancestor detection** - Identify shared ancestors efficiently
 - **Full-text search** - Search across all text fields with PostgreSQL's powerful text search
@@ -48,6 +52,7 @@ The PostgreSQL Enhanced addon provides a professional-grade database backend for
 - **Statistical analysis** - Aggregate queries across entire database
 
 ### Performance Metrics (Actual Test Results)
+
 - **Tested with**: 100,000+ person databases
 - **Import rate**: ~13 persons/second for large GEDCOM files
 - **Network performance**: Remains performant even over network connections
@@ -55,23 +60,26 @@ The PostgreSQL Enhanced addon provides a professional-grade database backend for
 - **Memory efficiency**: Peak 473MB for 86k person import
 - **Query performance**: Millisecond response times for complex queries
 
-### Extension Support (When PostgreSQL Extensions Installed)
+### Extension Support for future capabilities (When PostgreSQL Extensions Installed)
+
 - **pg_trgm** - Fuzzy text matching and similarity searches
 - **btree_gin** - Advanced JSONB indexing for faster queries
 - **intarray** - Efficient array operations
-- **pgvector** - Vector similarity search capabilities
+- **pgvector** - Vector similarity search/AI capabilities
 - **Apache AGE** - Graph database features for relationship analysis
 - **PostGIS** - Geospatial queries for location-based research
 
 ## Requirements
 
 ### Software Requirements
-- **Gramps**: Version 5.1 or higher (tested with 5.2.3 and 6.0.3)
+
+- **Gramps**: Version 6.x or higher
 - **PostgreSQL**: Version 15 or higher
-- **Python**: 3.8 or higher (as required by your Gramps version)
-- **psycopg**: Version 3.1 or higher (NOT psycopg2!)
+- **Python**: 3.9 or higher (as required by your Gramps version)
+- **psycopg**: Version 3 or higher (NOT psycopg2!)
 
 ### PostgreSQL Extensions (Optional but Recommended)
+
 ```sql
 -- Core extensions for enhanced functionality
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";     -- UUID generation
@@ -90,12 +98,14 @@ CREATE EXTENSION IF NOT EXISTS "postgis";       -- Geospatial capabilities
 ### Step 1: Install PostgreSQL
 
 **Ubuntu/Debian:**
+
 ```bash
 sudo apt update
 sudo apt install postgresql-15 postgresql-contrib-15
 ```
 
 **macOS:**
+
 ```bash
 brew install postgresql@15
 brew services start postgresql@15
@@ -135,6 +145,7 @@ EOF
 ### Step 4: Install the Addon
 
 **Option A: Download from GitHub**
+
 ```bash
 # Create plugins directory if it doesn't exist
 mkdir -p ~/.local/share/gramps/gramps60/plugins/
@@ -145,6 +156,7 @@ git clone https://github.com/glamberson/gramps-postgresql-enhanced.git PostgreSQ
 ```
 
 **Option B: Manual Installation**
+
 1. Download the addon files
 2. Place them in: `~/.local/share/gramps/gramps60/plugins/PostgreSQLEnhanced/`
 3. Ensure all Python files are present
@@ -160,11 +172,13 @@ The PostgreSQL Enhanced addon uses a file-based configuration system. **Note**: 
 The addon looks for `connection_info.txt` in this priority order:
 
 1. **Central Plugin Configuration** (used by both modes):
+   
    ```
    ~/.local/share/gramps/gramps60/plugins/PostgreSQLEnhanced/connection_info.txt
    ```
 
 2. **Per-Tree Configuration** (future enhancement):
+   
    ```
    ~/.local/share/gramps/grampsdb/<tree_id>/connection_info.txt
    ```
@@ -198,6 +212,7 @@ shared_database_name = gramps_monolithic
 ### Database Modes - Both Fully Tested and Working
 
 #### Monolithic Mode
+
 - **How it works**: All family trees share one PostgreSQL database
 - **Table naming**: Each tree's tables are prefixed with `tree_<treeid>_`
 - **Example**: Tree "68932301" creates tables like `tree_68932301_person`
@@ -210,6 +225,7 @@ shared_database_name = gramps_monolithic
 - **Best for**: Organizations managing multiple related trees
 
 #### Separate Mode
+
 - **How it works**: Each family tree gets its own PostgreSQL database
 - **Database naming**: Creates database named after the tree ID
 - **Table naming**: Direct names without prefixes
@@ -220,6 +236,7 @@ shared_database_name = gramps_monolithic
   - Per-tree backup/restore
   - Better for multi-user scenarios
   - Independent database tuning per tree
+  - Lightning fast
 - **Best for**: Large independent trees or multi-tenant environments
 
 ## Creating a Family Tree
@@ -287,7 +304,9 @@ To switch from monolithic to separate mode (or vice versa):
 ## Design Features
 
 ### Data Preservation Policy
+
 When you delete a tree from Gramps, the PostgreSQL tables/database are **intentionally preserved**. This is a critical safety feature that:
+
 - Prevents accidental data loss of irreplaceable genealogical data
 - Allows recovery of "deleted" trees
 - Provides an audit trail
@@ -298,6 +317,7 @@ This is especially important when managing genealogical data representing centur
 ### Manual Cleanup When Needed
 
 **For Monolithic Mode (removing tables):**
+
 ```bash
 # Remove tables for a specific tree
 TREE_ID="689304d4"  # Replace with actual tree ID
@@ -310,6 +330,7 @@ done
 ```
 
 **For Separate Mode (removing database):**
+
 ```bash
 # Drop entire database for a tree
 TREE_ID="689304d4"
@@ -320,6 +341,7 @@ PGPASSWORD='YourPassword' psql -h localhost -U genealogy_user -d postgres \
 ## Advanced Features
 
 ### Relationship Queries
+
 ```python
 # Find common ancestors between two people
 ancestors = db.find_common_ancestors(person1_handle, person2_handle)
@@ -329,19 +351,23 @@ path = db.find_relationship_path(person1_handle, person2_handle)
 ```
 
 ### Full-Text Search
+
 ```python
 # Search across all text fields
 results = db.search_all_text("immigration 1850")
 ```
 
 ### Duplicate Detection
+
 ```python
 # Find potential duplicate persons (requires pg_trgm)
 duplicates = db.enhanced_queries.find_potential_duplicates(threshold=0.8)
 ```
 
 ### Direct SQL Access
+
 For power users, direct SQL queries are possible:
+
 ```sql
 -- Find all persons born in a specific year
 SELECT json_data->>'gramps_id' as id, 
@@ -375,6 +401,7 @@ max_connections = 100
 ### Connection Pooling
 
 Enable connection pooling in `connection_info.txt`:
+
 ```ini
 pool_size = 10
 ```
@@ -395,26 +422,32 @@ tail -f ~/.gramps/postgresql_enhanced_debug.log
 ### Common Issues and Solutions
 
 **"psycopg not found"**
+
 - Ensure you installed psycopg3, not psycopg2: `pip install 'psycopg[binary]'`
 
 **"Connection refused"**
+
 - Check PostgreSQL is running: `sudo systemctl status postgresql`
 - Verify connection details in `connection_info.txt`
 - Check PostgreSQL authentication in `pg_hba.conf`
 
 **"Insufficient privilege"**
+
 - For separate mode, user needs CREATEDB privilege:
+  
   ```sql
   ALTER USER genealogy_user CREATEDB;
   ```
 
 **Tables not found**
+
 - Check you're using the correct database mode in configuration
 - Verify table prefix matches tree ID in monolithic mode
 
 ## Testing and Verification
 
 ### System Testing Completed
+
 - ✅ Both database modes thoroughly tested
 - ✅ Successfully tested with 100,000+ person databases
 - ✅ Network performance verified
@@ -457,6 +490,7 @@ ORDER BY pg_total_relation_size(schemaname||'.'||tablename) DESC;"
 ### Backup Procedures
 
 **Monolithic Mode (specific tree):**
+
 ```bash
 # Backup specific tree's tables
 TREE_ID="68932301"
@@ -465,6 +499,7 @@ pg_dump -h localhost -U genealogy_user -d gramps_monolithic \
 ```
 
 **Separate Mode (entire database):**
+
 ```bash
 # Backup entire tree database
 TREE_ID="68932301"
@@ -481,25 +516,31 @@ pg_restore -h localhost -U genealogy_user -d target_database backup_file.dump
 ## Technical Implementation Details
 
 ### Database Schema
+
 The addon creates standard Gramps tables with enhanced capabilities:
+
 - Each primary object has both `blob_data` (pickle) and `json_data` (JSONB) columns
 - Secondary indexes maintained for Gramps compatibility
 - Full referential integrity with foreign keys
 - Optimized indexes for genealogical queries
 
 ### Table Prefix Implementation
+
 In monolithic mode, all SQL queries are automatically prefixed:
+
 - `person` becomes `tree_68932301_person`
 - Handled transparently by `TablePrefixWrapper` class
 - No changes needed to Gramps queries
 
 ### Transaction Handling
+
 - Uses PostgreSQL savepoints for nested transactions
 - Automatic rollback on errors
 - Maintains full Gramps undo/redo functionality
 - ACID compliance for data integrity
 
 ### JSONB Storage Benefits
+
 - Enables SQL queries on Gramps data structure
 - Supports partial updates without full deserialization
 - Allows creation of functional indexes
@@ -509,13 +550,16 @@ In monolithic mode, all SQL queries are automatically prefixed:
 ## Support and Contributing
 
 ### Getting Help
+
 - Enable debug mode for detailed error messages
 - Check PostgreSQL logs: `/var/log/postgresql/`
 - Review debug logs: `~/.gramps/postgresql_enhanced_debug.log`
 - Open an issue on [GitHub](https://github.com/glamberson/gramps-postgresql-enhanced/issues)
 
 ### Contributing
+
 Contributions are welcome! Please:
+
 1. Follow Gramps coding standards
 2. Test with large databases
 3. Update documentation
@@ -527,7 +571,7 @@ GNU General Public License v2 or later
 
 ## Author
 
-Greg Lamberson - greg@aigenealogyinsights.com
+Greg Lamberson - lamberson@yahoo.com
 
 ## Acknowledgments
 
