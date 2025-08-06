@@ -229,8 +229,8 @@ class PostgreSQLEnhanced(DBAPI):
                 # Check for extensions
                 self.dbapi.execute(
                     """
-                    SELECT extname, extversion
-                    FROM pg_extension
+                    SELECT extname, extversion 
+                    FROM pg_extension 
                     WHERE extname IN ('pgvector', 'age', 'postgis', 'hstore', 'pg_trgm')
                     ORDER BY extname
                 """
@@ -242,7 +242,7 @@ class PostgreSQLEnhanced(DBAPI):
                 # Database statistics
                 self.dbapi.execute(
                     """
-                    SELECT
+                    SELECT 
                         pg_database_size(current_database()) as db_size,
                         (SELECT count(*) FROM person) as person_count,
                         (SELECT count(*) FROM family) as family_count,
@@ -491,7 +491,7 @@ class PostgreSQLEnhanced(DBAPI):
     def _read_config_file(self, config_path):
         """
         Read a connection_info.txt file.
-
+        
         :param config_path: Path to config file
         :type config_path: str
         :returns: Dictionary of configuration values
@@ -510,7 +510,7 @@ class PostgreSQLEnhanced(DBAPI):
     def _load_connection_config(self, directory):
         """
         Load connection configuration from connection_info.txt.
-
+        
         Priority order:
         1. Central plugin config (for monolithic mode)
         2. Per-tree config (for separate mode)
@@ -524,7 +524,7 @@ class PostgreSQLEnhanced(DBAPI):
         # First, try central config location
         plugin_dir = os.path.dirname(os.path.abspath(__file__))
         central_config_path = os.path.join(plugin_dir, "connection_info.txt")
-
+        
         # Check if central config exists and what mode it specifies
         if os.path.exists(central_config_path):
             central_config = self._read_config_file(central_config_path)
@@ -532,7 +532,7 @@ class PostgreSQLEnhanced(DBAPI):
                 # In monolithic mode, ALWAYS use central config
                 LOG.info("Using central config for monolithic mode from %s", central_config_path)
                 return central_config
-
+        
         # For separate mode or if no central config, check per-tree config
         config_path = os.path.join(directory, "connection_info.txt")
         config = {
@@ -825,38 +825,31 @@ class PostgreSQLEnhanced(DBAPI):
         return stats
 
     def commit_person(self, person, trans, change_time=None):
+        LOG.debug("=== COMMIT PERSON START ===")
+        LOG.debug(f"Handle: {person.handle}, Gramps ID: {person.gramps_id}")
+        LOG.debug(f"Primary name: {person.primary_name}")
+        LOG.debug(f"Change time: {change_time}")
         """
         Override commit_person to handle NULL first names gracefully.
-
+        
         The Gramps core genderstats module doesn't handle NULL first names,
         causing AttributeError when it tries to call split() on None.
         This is a common case in genealogy (unknown names, especially for women).
-
+        
         We temporarily patch the genderstats function to handle None.
-
-        :param person: Person object to commit
-        :type person: Person
-        :param trans: Transaction object
-        :type trans: DbTxn
-        :param change_time: Optional timestamp for the change
-        :type change_time: int or None
         """
-        LOG.debug("=== COMMIT PERSON START ===")
-        LOG.debug("Handle: %s, Gramps ID: %s", person.handle, person.gramps_id)
-        LOG.debug("Primary name: %s", person.primary_name)
-        LOG.debug("Change time: %s", change_time)
         # Import the genderstats module
         from gramps.gen.lib import genderstats
-
+        
         # Save the original function
         original_get_key_from_name = genderstats._get_key_from_name
-
+        
         # Create a patched version that handles None
         def patched_get_key_from_name(name):
             if name is None:
                 return ""
             return original_get_key_from_name(name)
-
+        
         # Temporarily patch the function
         genderstats._get_key_from_name = patched_get_key_from_name
         try:
@@ -865,39 +858,26 @@ class PostgreSQLEnhanced(DBAPI):
         finally:
             # Restore the original function
             genderstats._get_key_from_name = original_get_key_from_name
-
+    
     def get_person_from_handle(self, handle):
+        LOG.debug(f"Getting person with handle: {handle}")
         """
         Override to return None instead of raising exception for nonexistent handles.
-        
         This matches the expected Gramps behavior.
-        
-        :param handle: Handle of the person to retrieve
-        :type handle: str
-        :returns: Person object or None if not found
-        :rtype: Person or None
         """
-        LOG.debug("Getting person with handle: %s", handle)
         try:
             return super().get_person_from_handle(handle)
-        except Exception:
+        except:
             return None
-
+    
     def get_family_from_handle(self, handle):
-        """
-        Override to return None for nonexistent handles.
-        
-        :param handle: Handle of the family to retrieve
-        :type handle: str
-        :returns: Family object or None if not found
-        :rtype: Family or None
-        """
-        LOG.debug("Getting family with handle: %s", handle)
+        LOG.debug(f"Getting family with handle: {handle}")
+        """Override to return None for nonexistent handles."""
         try:
             return super().get_family_from_handle(handle)
-        except Exception:
+        except:
             return None
-
+    
     def get_dbname(self):
         """
         Return a string identifier for the database.
@@ -906,7 +886,7 @@ class PostgreSQLEnhanced(DBAPI):
         if hasattr(self, 'table_prefix') and self.table_prefix:
             return f"postgresql:{self.table_prefix.rstrip('_')}"
         return "postgresql:database"
-
+    
     def get_save_path(self):
         """
         Return a path-like string for the database.
@@ -917,131 +897,75 @@ class PostgreSQLEnhanced(DBAPI):
             # Return something that can be hashed consistently for this tree
             return f"postgresql_{self.table_prefix.rstrip('_')}"
         return "postgresql_database"
-
+    
     def get_event_from_handle(self, handle):
-        """
-        Override to return None for nonexistent handles.
-        
-        :param handle: Handle of the event to retrieve
-        :type handle: str
-        :returns: Event object or None if not found
-        :rtype: Event or None
-        """
-        LOG.debug("Getting event with handle: %s", handle)
+        LOG.debug(f"Getting event with handle: {handle}")
+        """Override to return None for nonexistent handles."""
         try:
             return super().get_event_from_handle(handle)
-        except Exception:
+        except:
             return None
-
+    
     def get_place_from_handle(self, handle):
-        """
-        Override to return None for nonexistent handles.
-        
-        :param handle: Handle of the place to retrieve
-        :type handle: str
-        :returns: Place object or None if not found
-        :rtype: Place or None
-        """
-        LOG.debug("Getting place with handle: %s", handle)
+        LOG.debug(f"Getting place with handle: {handle}")
+        """Override to return None for nonexistent handles."""
         try:
             return super().get_place_from_handle(handle)
-        except Exception:
+        except:
             return None
-
+    
     def get_source_from_handle(self, handle):
-        """
-        Override to return None for nonexistent handles.
-        
-        :param handle: Handle of the source to retrieve
-        :type handle: str
-        :returns: Source object or None if not found
-        :rtype: Source or None
-        """
-        LOG.debug("Getting source with handle: %s", handle)
+        LOG.debug(f"Getting source with handle: {handle}")
+        """Override to return None for nonexistent handles."""
         try:
             return super().get_source_from_handle(handle)
-        except Exception:
+        except:
             return None
-
+    
     def get_citation_from_handle(self, handle):
-        """
-        Override to return None for nonexistent handles.
-        
-        :param handle: Handle of the citation to retrieve
-        :type handle: str
-        :returns: Citation object or None if not found
-        :rtype: Citation or None
-        """
-        LOG.debug("Getting citation with handle: %s", handle)
+        LOG.debug(f"Getting citation with handle: {handle}")
+        """Override to return None for nonexistent handles."""
         try:
             return super().get_citation_from_handle(handle)
-        except Exception:
+        except:
             return None
-
+    
     def get_repository_from_handle(self, handle):
-        """
-        Override to return None for nonexistent handles.
-        
-        :param handle: Handle of the repository to retrieve
-        :type handle: str
-        :returns: Repository object or None if not found
-        :rtype: Repository or None
-        """
-        LOG.debug("Getting repository with handle: %s", handle)
+        LOG.debug(f"Getting repository with handle: {handle}")
+        """Override to return None for nonexistent handles."""
         try:
             return super().get_repository_from_handle(handle)
-        except Exception:
+        except:
             return None
-
+    
     def get_media_from_handle(self, handle):
-        """
-        Override to return None for nonexistent handles.
-        
-        :param handle: Handle of the media to retrieve
-        :type handle: str
-        :returns: Media object or None if not found
-        :rtype: Media or None
-        """
-        LOG.debug("Getting media with handle: %s", handle)
+        LOG.debug(f"Getting media with handle: {handle}")
+        """Override to return None for nonexistent handles."""
         try:
             return super().get_media_from_handle(handle)
-        except Exception:
+        except:
             return None
-
+    
     def get_note_from_handle(self, handle):
-        """
-        Override to return None for nonexistent handles.
-        
-        :param handle: Handle of the note to retrieve
-        :type handle: str
-        :returns: Note object or None if not found
-        :rtype: Note or None
-        """
-        LOG.debug("Getting note with handle: %s", handle)
+        LOG.debug(f"Getting note with handle: {handle}")
+        """Override to return None for nonexistent handles."""
         try:
             return super().get_note_from_handle(handle)
-        except Exception:
+        except:
             return None
-
+    
     def get_tag_from_handle(self, handle):
-        """
-        Override to return None for nonexistent handles.
-        
-        :param handle: Handle of the tag to retrieve
-        :type handle: str
-        :returns: Tag object or None if not found
-        :rtype: Tag or None
-        """
-        LOG.debug("Getting tag with handle: %s", handle)
+        LOG.debug(f"Getting tag with handle: {handle}")
+        """Override to return None for nonexistent handles."""
         try:
             return super().get_tag_from_handle(handle)
-        except Exception:
+        except:
             return None
-
+    
     def _order_by_person_key(self, person):
         """
         Override to handle NULL names properly.
-
+        
         The parent class doesn't handle None values in names,
         causing concatenation errors in concurrent updates.
         """
@@ -1105,7 +1029,7 @@ class PostgreSQLEnhanced(DBAPI):
         :type use_txn: bool
         """
         import psycopg
-
+        
         # Retry logic for concurrent access
         max_retries = 3
         for attempt in range(max_retries):
@@ -1124,20 +1048,20 @@ class PostgreSQLEnhanced(DBAPI):
                 # This is atomic and handles concurrent access properly
                 self.dbapi.execute(
                     f"""
-                    INSERT INTO {table_name} (setting, value)
+                    INSERT INTO {table_name} (setting, value) 
                     VALUES (%s, %s)
-                    ON CONFLICT (setting)
+                    ON CONFLICT (setting) 
                     DO UPDATE SET value = EXCLUDED.value
                     """,
                     [key, pickle.dumps(value)]
                 )
-
+                
                 if use_txn:
                     self._txn_commit()
-
+                    
                 # Success, exit retry loop
                 break
-
+                
             except psycopg.errors.SerializationFailure as e:
                 # Rollback and retry for serialization failures
                 if use_txn:
@@ -1145,7 +1069,7 @@ class PostgreSQLEnhanced(DBAPI):
                         self._txn_abort()
                     except:
                         pass
-
+                        
                 if attempt < max_retries - 1:
                     import time
                     time.sleep(0.01 * (2 ** attempt))  # Exponential backoff
