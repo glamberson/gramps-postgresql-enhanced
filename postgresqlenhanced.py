@@ -825,6 +825,10 @@ class PostgreSQLEnhanced(DBAPI):
         return stats
 
     def commit_person(self, person, trans, change_time=None):
+        LOG.debug("=== COMMIT PERSON START ===")
+        LOG.debug(f"Handle: {person.handle}, Gramps ID: {person.gramps_id}")
+        LOG.debug(f"Primary name: {person.primary_name}")
+        LOG.debug(f"Change time: {change_time}")
         """
         Override commit_person to handle NULL first names gracefully.
         
@@ -856,6 +860,7 @@ class PostgreSQLEnhanced(DBAPI):
             genderstats._get_key_from_name = original_get_key_from_name
     
     def get_person_from_handle(self, handle):
+        LOG.debug(f"Getting person with handle: {handle}")
         """
         Override to return None instead of raising exception for nonexistent handles.
         This matches the expected Gramps behavior.
@@ -866,6 +871,7 @@ class PostgreSQLEnhanced(DBAPI):
             return None
     
     def get_family_from_handle(self, handle):
+        LOG.debug(f"Getting family with handle: {handle}")
         """Override to return None for nonexistent handles."""
         try:
             return super().get_family_from_handle(handle)
@@ -893,6 +899,7 @@ class PostgreSQLEnhanced(DBAPI):
         return "postgresql_database"
     
     def get_event_from_handle(self, handle):
+        LOG.debug(f"Getting event with handle: {handle}")
         """Override to return None for nonexistent handles."""
         try:
             return super().get_event_from_handle(handle)
@@ -900,6 +907,7 @@ class PostgreSQLEnhanced(DBAPI):
             return None
     
     def get_place_from_handle(self, handle):
+        LOG.debug(f"Getting place with handle: {handle}")
         """Override to return None for nonexistent handles."""
         try:
             return super().get_place_from_handle(handle)
@@ -907,6 +915,7 @@ class PostgreSQLEnhanced(DBAPI):
             return None
     
     def get_source_from_handle(self, handle):
+        LOG.debug(f"Getting source with handle: {handle}")
         """Override to return None for nonexistent handles."""
         try:
             return super().get_source_from_handle(handle)
@@ -914,6 +923,7 @@ class PostgreSQLEnhanced(DBAPI):
             return None
     
     def get_citation_from_handle(self, handle):
+        LOG.debug(f"Getting citation with handle: {handle}")
         """Override to return None for nonexistent handles."""
         try:
             return super().get_citation_from_handle(handle)
@@ -921,6 +931,7 @@ class PostgreSQLEnhanced(DBAPI):
             return None
     
     def get_repository_from_handle(self, handle):
+        LOG.debug(f"Getting repository with handle: {handle}")
         """Override to return None for nonexistent handles."""
         try:
             return super().get_repository_from_handle(handle)
@@ -928,6 +939,7 @@ class PostgreSQLEnhanced(DBAPI):
             return None
     
     def get_media_from_handle(self, handle):
+        LOG.debug(f"Getting media with handle: {handle}")
         """Override to return None for nonexistent handles."""
         try:
             return super().get_media_from_handle(handle)
@@ -935,6 +947,7 @@ class PostgreSQLEnhanced(DBAPI):
             return None
     
     def get_note_from_handle(self, handle):
+        LOG.debug(f"Getting note with handle: {handle}")
         """Override to return None for nonexistent handles."""
         try:
             return super().get_note_from_handle(handle)
@@ -942,6 +955,7 @@ class PostgreSQLEnhanced(DBAPI):
             return None
     
     def get_tag_from_handle(self, handle):
+        LOG.debug(f"Getting tag with handle: {handle}")
         """Override to return None for nonexistent handles."""
         try:
             return super().get_tag_from_handle(handle)
