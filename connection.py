@@ -146,7 +146,7 @@ class PostgreSQLConnection:
             port = parts[1] or "5432"
             dbname = parts[2]
 
-            conninfo = "host=%s port={port} dbname={dbname}" % host
+            conninfo = "host=%s port=%s dbname=%s" % (host, port, dbname)
             if username:
                 conninfo += " user=%s" % username
             if password:
@@ -200,7 +200,7 @@ class PostgreSQLConnection:
 
         for env_var, param in env_mapping.items():
             if env_var in os.environ and param not in conninfo:
-                conninfo += " %s={os.environ[env_var]}" % param
+                conninfo += " %s=%s" % (param, os.environ[env_var])
 
         return conninfo
 
