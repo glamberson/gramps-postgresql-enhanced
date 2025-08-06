@@ -211,7 +211,7 @@ class PostgreSQLEnhanced(DBAPI):
                 version_str = self.dbapi.fetchone()[0]
                 match = re.search(r"PostgreSQL (\d+)\.(\d+)", version_str)
                 if match:
-                    pg_version = "%(val)s.{match.group(2)}" % {"val": match.group(1)}
+                    pg_version = "%s.%s" % (match.group(1), match.group(2))
                     pg_major = int(match.group(1))
                 else:
                     pg_version = "Unknown"
@@ -345,8 +345,13 @@ class PostgreSQLEnhanced(DBAPI):
 
             # Build connection string
             connection_string = (
-                "postgresql://%(val)s:{config['password']}@" % {"val": config['user']}
-                "%(val)s:{config['port']}/{db_name}" % {"val": config['host']}
+                "postgresql://%s:%s@%s:%s/%s" % (
+                    config['user'],
+                    config['password'],
+                    config['host'],
+                    config['port'],
+                    db_name
+                )
             )
 
             LOG.info(
@@ -593,8 +598,12 @@ class PostgreSQLEnhanced(DBAPI):
         try:
             # Connect to 'postgres' database to check/create the target database
             temp_conn_string = (
-                "postgresql://%(val)s:{config['password']}@" % {"val": config['user']}
-                "%(val)s:{config['port']}/postgres" % {"val": config['host']}
+                "postgresql://%s:%s@%s:%s/postgres" % (
+                    config['user'],
+                    config['password'],
+                    config['host'],
+                    config['port']
+                )
             )
             temp_conn = psycopg.connect(temp_conn_string)
             temp_conn.autocommit = True
