@@ -432,20 +432,20 @@ class PostgreSQLSchema:
 
         # Create function for relationship queries
         self.conn.execute(
-            """
+            f"""
             CREATE OR REPLACE FUNCTION get_family_members(family_handle TEXT)
             RETURNS TABLE(handle TEXT, role TEXT) AS $$
             BEGIN
                 -- Get parents
                 RETURN QUERY
                 SELECT jsonb_array_elements_text(f.json_data->'parent_handles'), 'parent'::TEXT
-                FROM family f
+                FROM {self._table_name('family')} f
                 WHERE f.handle = family_handle;
 
                 -- Get children
                 RETURN QUERY
                 SELECT jsonb_array_elements_text(f.json_data->'child_ref_list'), 'child'::TEXT
-                FROM family f
+                FROM {self._table_name('family')} f
                 WHERE f.handle = family_handle;
             END;
             $$ LANGUAGE plpgsql STABLE PARALLEL SAFE;

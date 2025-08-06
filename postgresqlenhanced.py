@@ -1235,7 +1235,7 @@ class TablePrefixWrapper:
                 # SELECT patterns - MUST handle queries without keywords before FROM
                 (
                     r"\bSELECT\s+(.+?)\s+FROM\s+(%s)\b" % table,
-                    lambda m: "SELECT %(val)s FROM {self._prefix}{m.group(2)}" % {"val": m.group(1)},
+                    lambda m: f"SELECT {m.group(1)} FROM {self._prefix}{m.group(2)}",
                 ),
                 # Basic patterns with keywords before table name
                 (r"\b(FROM)\s+(%s)\b" % table, r"\1 %(val)s\2" % {"val": self._prefix}),
@@ -1272,7 +1272,7 @@ class TablePrefixWrapper:
                 (
                     r"\bEXISTS\s*\(\s*SELECT\s+.+?\s+FROM\s+(%s)\b" % table,
                     lambda m: m.group(0).replace(
-                        "FROM %(val)s" % {"val": m.group(1)}, "FROM %(val)s{m.group(1)}" % {"val": self._prefix}
+                        f"FROM {m.group(1)}", f"FROM {self._prefix}{m.group(1)}"
                     ),
                 ),
                 # Table name in WHERE clauses with table.column syntax
@@ -1367,7 +1367,7 @@ class CursorPrefixWrapper:
                 # SELECT patterns - MUST handle queries without keywords before FROM
                 (
                     r"\bSELECT\s+(.+?)\s+FROM\s+(%s)\b" % table,
-                    lambda m: "SELECT %(val)s FROM {self._prefix}{m.group(2)}" % {"val": m.group(1)},
+                    lambda m: f"SELECT {m.group(1)} FROM {self._prefix}{m.group(2)}",
                 ),
                 # Basic patterns with keywords before table name
                 (r"\b(FROM)\s+(%s)\b" % table, r"\1 %(val)s\2" % {"val": self._prefix}),
@@ -1404,7 +1404,7 @@ class CursorPrefixWrapper:
                 (
                     r"\bEXISTS\s*\(\s*SELECT\s+.+?\s+FROM\s+(%s)\b" % table,
                     lambda m: m.group(0).replace(
-                        "FROM %(val)s" % {"val": m.group(1)}, "FROM %(val)s{m.group(1)}" % {"val": self._prefix}
+                        f"FROM {m.group(1)}", f"FROM {self._prefix}{m.group(1)}"
                     ),
                 ),
                 # Table name in WHERE clauses with table.column syntax
