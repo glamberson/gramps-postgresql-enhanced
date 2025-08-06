@@ -664,7 +664,7 @@ class PostgreSQLEnhanced(DBAPI):
         table = obj.__class__.__name__.lower()
         # Use table prefix if in shared mode
         table_name = (
-            "%(val)s{table}" % {"val": self.table_prefix} if hasattr(self, "table_prefix") else table
+            f"{self.table_prefix}{table}" if hasattr(self, "table_prefix") else table
         )
 
         # Build UPDATE statement based on object type
@@ -672,7 +672,7 @@ class PostgreSQLEnhanced(DBAPI):
             sets = []
 
             for col_name, json_path in REQUIRED_COLUMNS[table].items():
-                sets.append("%s = ({json_path})" % col_name)
+                sets.append(f"{col_name} = ({json_path})")
 
             if sets:
                 # Execute UPDATE using JSONB extraction
