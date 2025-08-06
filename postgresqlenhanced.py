@@ -872,6 +872,26 @@ class PostgreSQLEnhanced(DBAPI):
         except:
             return None
     
+    def get_dbname(self):
+        """
+        Return a string identifier for the database.
+        For PostgreSQL, return connection info instead of a filename.
+        """
+        if hasattr(self, 'table_prefix') and self.table_prefix:
+            return f"postgresql:{self.table_prefix.rstrip('_')}"
+        return "postgresql:database"
+    
+    def get_save_path(self):
+        """
+        Return a path-like string for the database.
+        The verify tool uses this to create an MD5 hash for storing ignored issues.
+        For PostgreSQL, we return a unique string based on the tree ID.
+        """
+        if hasattr(self, 'table_prefix') and self.table_prefix:
+            # Return something that can be hashed consistently for this tree
+            return f"postgresql_{self.table_prefix.rstrip('_')}"
+        return "postgresql_database"
+    
     def get_event_from_handle(self, handle):
         """Override to return None for nonexistent handles."""
         try:
