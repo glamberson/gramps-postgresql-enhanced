@@ -186,6 +186,11 @@ class PostgreSQLEnhanced(DBAPI):
         if DEBUG_ENABLED and DEBUG_AVAILABLE:
             self._debug_context = DebugContext(LOG)
             LOG.debug("Debug context initialized")
+        
+        # Detect Gramps Web environment
+        self.grampsweb_active = self._detect_grampsweb_environment()
+        if self.grampsweb_active:
+            LOG.info("PostgreSQL Enhanced: Gramps Web environment detected")
 
     def get_summary(self):
         """
@@ -928,6 +933,97 @@ class PostgreSQLEnhanced(DBAPI):
             return "postgresql_%(val)s" % {"val": self.table_prefix.rstrip('_')}
         return "postgresql_database"
 
+    def get_dbid(self):
+        """
+        Return unique database identifier.
+        Required by Gramps Web for tree identification.
+        
+        :returns: Unique database identifier (UUID)
+        :rtype: str
+        """
+        # Try to get from metadata first
+        try:
+            dbid = self.get_metadata('dbid')
+            if dbid:
+                return dbid
+        except Exception:
+            pass
+        
+        # Generate new UUID and store it
+        import uuid
+        dbid = str(uuid.uuid4())
+        try:
+            self.set_metadata('dbid', dbid)
+        except Exception as e:
+            LOG.warning("Could not store database ID in metadata: %s", e)
+        
+        return dbid
+    
+    def _detect_grampsweb_environment(self):
+        """
+        Detect if running under Gramps Web.
+        
+        :returns: True if Gramps Web environment variables are present
+        :rtype: bool
+        """
+        grampsweb_indicators = [
+            'GRAMPSWEB_TREE',           # Multi-tree mode indicator
+            'GRAMPSWEB_USER_DB_URI',    # User database URI
+            'GRAMPSWEB_NEW_DB_BACKEND', # Backend specification
+            'GRAMPSWEB_POSTGRES_HOST',  # PostgreSQL configuration
+        ]
+        
+        for indicator in grampsweb_indicators:
+            if os.environ.get(indicator):
+                LOG.debug("Gramps Web detected via %s", indicator)
+                return True
+        
+        return False
+    
+    def is_read_only(self):
+        """
+        Check if database is read-only.
+        Used by Gramps Web for UI permission handling.
+        
+        :returns: True if database is read-only
+        :rtype: bool
+        """
+        return getattr(self, 'readonly', False)
+    
+    def get_mediapath(self):
+        """
+        Get media directory path.
+        Used by Gramps Web for media file handling.
+        
+        :returns: Path to media directory or None
+        :rtype: str or None
+        """
+        # Check metadata first
+        try:
+            path = self.get_metadata('mediapath')
+            if path:
+                return path
+        except Exception:
+            pass
+        
+        # Default to subdirectory of tree directory
+        if hasattr(self, 'directory') and self.directory:
+            return os.path.join(self.directory, 'media')
+        
+        return None
+    
+    def set_mediapath(self, path):
+        """
+        Set media directory path.
+        
+        :param path: Path to media directory
+        :type path: str
+        """
+        try:
+            self.set_metadata('mediapath', path)
+        except Exception as e:
+            LOG.warning("Could not store media path in metadata: %s", e)
+
     def get_event_from_handle(self, handle):
         """
         Override to return None for nonexistent handles.
@@ -1162,6 +1258,162 @@ class PostgreSQLEnhanced(DBAPI):
                     continue
                 else:
                     raise
+    
+    # ========================================================================
+    # Gramps Web Multi-Tree Support (Class Methods)
+    # ========================================================================
+    
+    @classmethod
+    def create_tree(cls, tree_id=None, name=None):
+        """
+        Create a new family tree.
+        Required by Gramps Web API for POST /api/trees/
+        
+        :param tree_id: Optional tree identifier (UUID if not provided)
+        :type tree_id: str or None
+        :param name: Optional human-readable tree name
+        :type name: str or None
+        :returns: Tree identifier for the created tree
+        :rtype: str
+        """
+        import uuid
+        import tempfile
+        
+        # Generate tree ID if not provided
+        if not tree_id:
+            tree_id = str(uuid.uuid4())
+        
+        # Determine tree directory
+        gramps_home = os.environ.get('GRAMPS_HOME', tempfile.gettempdir())
+        tree_dir = os.path.join(gramps_home, 'gramps_tree_%s' % tree_id)
+        os.makedirs(tree_dir, exist_ok=True)
+        
+        # Determine database mode from environment
+        database_mode = os.environ.get('POSTGRESQL_ENHANCED_MODE', 'separate')
+        
+        # Create connection_info.txt
+        config_path = os.path.join(tree_dir, 'connection_info.txt')
+        with open(config_path, 'w') as f:
+            f.write("# PostgreSQL Enhanced Configuration\n")
+            f.write("# Auto-generated for Gramps Web\n\n")
+            f.write("# Connection details\n")
+            f.write("host = %s\n" % os.environ.get('GRAMPSWEB_POSTGRES_HOST', '192.168.10.90'))
+            f.write("port = %s\n" % os.environ.get('GRAMPSWEB_POSTGRES_PORT', '5432'))
+            f.write("user = %s\n" % os.environ.get('GRAMPSWEB_POSTGRES_USER', 'genealogy_user'))
+            f.write("password = %s\n" % os.environ.get('GRAMPSWEB_POSTGRES_PASSWORD', 'GenealogyData2025'))
+            f.write("\n# Database mode\n")
+            f.write("database_mode = %s\n" % database_mode)
+            
+            if database_mode == 'monolithic':
+                f.write("\n# Monolithic mode configuration\n")
+                f.write("monolithic_database = %s\n" % 
+                       os.environ.get('GRAMPSWEB_POSTGRES_DB', 'henderson_unified'))
+                f.write("tree_prefix = tree_%s_\n" % tree_id[:8])
+        
+        # Write database.txt
+        with open(os.path.join(tree_dir, 'database.txt'), 'w') as f:
+            f.write('postgresqlenhanced')
+        
+        # Write name.txt
+        with open(os.path.join(tree_dir, 'name.txt'), 'w') as f:
+            f.write(name or 'Tree %s' % tree_id[:8])
+        
+        # Initialize the database
+        try:
+            db = cls()
+            db._initialize(tree_dir, None, None)
+            
+            # Set initial metadata
+            db.set_metadata('dbid', tree_id)
+            db.set_metadata('name', name or 'Tree %s' % tree_id[:8])
+            db.set_metadata('created', str(time.time()))
+            
+            LOG.info("Created tree %s in %s mode", tree_id, database_mode)
+            
+        except Exception as e:
+            LOG.error("Failed to create tree %s: %s", tree_id, e)
+            raise
+        
+        return tree_id
+    
+    @classmethod
+    def list_trees(cls):
+        """
+        List available family trees.
+        Optional for Gramps Web multi-tree mode.
+        
+        :returns: List of tree dictionaries with id, name, and path
+        :rtype: list
+        """
+        trees = []
+        
+        # For monolithic mode, query the database
+        if os.environ.get('POSTGRESQL_ENHANCED_MODE') == 'monolithic':
+            try:
+                # Connect to monolithic database
+                conn_params = {
+                    'host': os.environ.get('GRAMPSWEB_POSTGRES_HOST', '192.168.10.90'),
+                    'port': int(os.environ.get('GRAMPSWEB_POSTGRES_PORT', 5432)),
+                    'dbname': os.environ.get('GRAMPSWEB_POSTGRES_DB', 'gramps_monolithic'),
+                    'user': os.environ.get('GRAMPSWEB_POSTGRES_USER', 'genealogy_user'),
+                    'password': os.environ.get('GRAMPSWEB_POSTGRES_PASSWORD', 'GenealogyData2025'),
+                }
+                
+                with psycopg.connect(**conn_params) as conn:
+                    with conn.cursor() as cur:
+                        # Query for all tree prefixes
+                        cur.execute("""
+                            SELECT DISTINCT 
+                                substring(tablename from 'tree_(.*)_metadata') as tree_id
+                            FROM pg_tables 
+                            WHERE tablename LIKE 'tree_%_metadata'
+                        """)
+                        
+                        for row in cur.fetchall():
+                            tree_id = row[0]
+                            trees.append({
+                                'id': tree_id,
+                                'name': 'Tree %s' % tree_id,
+                                'mode': 'monolithic'
+                            })
+                            
+            except Exception as e:
+                LOG.error("Failed to list trees from database: %s", e)
+        
+        # Also check file system
+        gramps_home = os.environ.get('GRAMPS_HOME', '/tmp')
+        if os.path.exists(gramps_home):
+            for entry in os.listdir(gramps_home):
+                if entry.startswith('gramps_tree_'):
+                    tree_dir = os.path.join(gramps_home, entry)
+                    tree_id = entry.replace('gramps_tree_', '')
+                    
+                    # Read name if available
+                    name_file = os.path.join(tree_dir, 'name.txt')
+                    name = 'Tree %s' % tree_id[:8]
+                    if os.path.exists(name_file):
+                        try:
+                            with open(name_file) as f:
+                                name = f.read().strip()
+                        except:
+                            pass
+                    
+                    # Check database mode
+                    mode = 'separate'
+                    config_file = os.path.join(tree_dir, 'connection_info.txt')
+                    if os.path.exists(config_file):
+                        with open(config_file) as f:
+                            if 'database_mode = monolithic' in f.read():
+                                mode = 'monolithic'
+                    
+                    trees.append({
+                        'id': tree_id,
+                        'name': name,
+                        'path': tree_dir,
+                        'mode': mode
+                    })
+        
+        return trees
 
 
 # ------------------------------------------------------------
