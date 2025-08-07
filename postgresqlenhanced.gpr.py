@@ -38,7 +38,7 @@ register(
         "and AI/ML capabilities. For developers and advanced users only. "
         "Requires PostgreSQL 15+ with extensions. Gramps Web compatible."
     ),
-    version="1.1.0",  # Bumped for Gramps Web compatibility
+    version="1.2.0",  # Added native search, pgvector & Apache AGE support
     gramps_target_version="6.0",
     status=STABLE,
     audience=DEVELOPER,  # Developer-level experimental features
