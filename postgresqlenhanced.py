@@ -85,6 +85,7 @@ from schema import PostgreSQLSchema
 from migration import MigrationManager
 from queries import EnhancedQueries
 from schema_columns import REQUIRED_COLUMNS
+from search_capabilities import SearchCapabilities, SearchAPI
 
 # -------------------------------------------------------------------------
 #
@@ -167,6 +168,8 @@ class PostgreSQLEnhanced(DBAPI):
         # Initialize components
         self.migration_manager = None
         self.enhanced_queries = None
+        self.search_capabilities = None
+        self.search_api = None
         self._use_jsonb = True  # Default to using JSONB
 
         # Initialize attributes that are set in _initialize
@@ -406,6 +409,20 @@ class PostgreSQLEnhanced(DBAPI):
         # Initialize enhanced queries if JSONB is enabled
         if self._use_jsonb:
             self.enhanced_queries = EnhancedQueries(self.dbapi)
+        
+        # Initialize search capabilities
+        try:
+            self.search_capabilities = SearchCapabilities(self.dbapi)
+            self.search_api = SearchAPI(self, self.search_capabilities)
+            
+            # Set up search infrastructure based on mode
+            mode = 'monolithic' if self.table_prefix else 'separate'
+            self.search_capabilities.setup_search_infrastructure(mode)
+            
+            LOG.info(f"Search capabilities initialized: {self.search_capabilities.search_level}")
+        except Exception as e:
+            LOG.warning(f"Could not initialize search capabilities: {e}")
+            # Continue without advanced search features
 
         # Log successful initialization
         LOG.info("PostgreSQL Enhanced initialized successfully")
@@ -1023,6 +1040,150 @@ class PostgreSQLEnhanced(DBAPI):
             self.set_metadata('mediapath', path)
         except Exception as e:
             LOG.warning("Could not store media path in metadata: %s", e)
+    
+    # ========================================================================
+    # Search API for Gramps Web and other consumers
+    # ========================================================================
+    
+    def search(self, query, search_type='auto', limit=100, **kwargs):
+        """
+        Unified search interface for Gramps Web compatibility.
+        
+        :param query: Search query string
+        :type query: str
+        :param search_type: Type of search ('auto', 'exact', 'fuzzy', 'phonetic', 'semantic')
+        :type search_type: str
+        :param limit: Maximum number of results
+        :type limit: int
+        :returns: List of search results with handles and relevance
+        :rtype: list
+        """
+        if not self.search_api:
+            # Fallback to basic search if capabilities not initialized
+            return self._basic_search_fallback(query, limit, **kwargs)
+        
+        return self.search_api.search(query, search_type, limit=limit, **kwargs)
+    
+    def setup_fulltext_search(self):
+        """
+        Set up PostgreSQL native full-text search.
+        This replaces the need for sifts entirely.
+        """
+        LOG.info("Setting up PostgreSQL native full-text search")
+        
+        # Add search vectors to all object tables
+        for obj_type in ['person', 'family', 'event', 'place', 'source', 'citation', 
+                        'repository', 'media', 'note', 'tag']:
+            table = self._get_table_name(obj_type)
+            
+            try:
+                # Add search column if not exists
+                with self.dbapi.execute(f"""
+                    ALTER TABLE {table} 
+                    ADD COLUMN IF NOT EXISTS search_vector tsvector
+                """):
+                    pass
+                
+                # Create GIN index for fast searching
+                with self.dbapi.execute(f"""
+                    CREATE INDEX IF NOT EXISTS idx_{table}_search 
+                    ON {table} USING GIN(search_vector)
+                """):
+                    pass
+                
+                # Create trigger to auto-update search vector
+                with self.dbapi.execute(f"""
+                    CREATE OR REPLACE FUNCTION {table}_search_trigger() 
+                    RETURNS trigger AS $$
+                    BEGIN
+                        NEW.search_vector := to_tsvector('simple', 
+                            coalesce(NEW.json_data::text, ''));
+                        RETURN NEW;
+                    END;
+                    $$ LANGUAGE plpgsql;
+                    
+                    DROP TRIGGER IF EXISTS {table}_search_update ON {table};
+                    
+                    CREATE TRIGGER {table}_search_update 
+                    BEFORE INSERT OR UPDATE ON {table}
+                    FOR EACH ROW 
+                    EXECUTE FUNCTION {table}_search_trigger();
+                """):
+                    pass
+                
+                # Update existing rows
+                with self.dbapi.execute(f"""
+                    UPDATE {table} 
+                    SET search_vector = to_tsvector('simple', coalesce(json_data::text, ''))
+                    WHERE search_vector IS NULL
+                """):
+                    pass
+                    
+                LOG.debug(f"Full-text search enabled for {table}")
+                
+            except Exception as e:
+                LOG.warning(f"Could not setup full-text search for {table}: {e}")
+    
+    def get_search_capabilities(self):
+        """
+        Get available search capabilities for Gramps Web.
+        
+        :returns: Dictionary of available search features
+        :rtype: dict
+        """
+        if not self.search_capabilities:
+            return {
+                'level': 'basic',
+                'features': ['basic_search'],
+                'extensions': {}
+            }
+        
+        return {
+            'level': self.search_capabilities.search_level,
+            'features': self.search_capabilities.get_available_features(),
+            'extensions': self.search_capabilities.capabilities
+        }
+    
+    def enable_search_extension(self, extension):
+        """
+        Try to enable a search extension if available.
+        
+        :param extension: Extension name (pg_trgm, fuzzystrmatch, etc.)
+        :type extension: str
+        :returns: True if successful
+        :rtype: bool
+        """
+        if not self.search_capabilities:
+            return False
+        
+        return self.search_capabilities.enable_extension(extension)
+    
+    def _basic_search_fallback(self, query, limit=100, **kwargs):
+        """
+        Basic search fallback when advanced features unavailable.
+        Uses ILIKE for case-insensitive matching.
+        """
+        results = []
+        query_pattern = f"%{query}%"
+        
+        # Search persons
+        table = self._get_table_name('person')
+        with self.dbapi.execute(f"""
+            SELECT handle, gramps_id, json_data
+            FROM {table}
+            WHERE json_data::text ILIKE %s
+            LIMIT %s
+        """, (query_pattern, limit)) as cur:
+            for row in cur.fetchall():
+                results.append({
+                    'type': 'person',
+                    'handle': row[0],
+                    'gramps_id': row[1],
+                    'data': row[2],
+                    'relevance': 1.0
+                })
+        
+        return results
 
     def get_event_from_handle(self, handle):
         """
