@@ -113,6 +113,6 @@
 
 ## 📝 License & Contact
 - **License**: GNU General Public License v2 or later
-- **Author**: Greg Lamberson (greg@aigenealogyinsights.com)
+- **Author**: Greg Lamberson (lamberson@yahoo.com)
 - **Repository**: https://github.com/glamberson/gramps-postgresql-enhanced
 - **Issues**: https://github.com/glamberson/gramps-postgresql-enhanced/issues

@@ -45,9 +45,9 @@ register(
     fname="postgresqlenhanced.py",
     databaseclass="PostgreSQLEnhanced",
     authors=["Greg Lamberson"],
-    authors_email=["greg@aigenealogyinsights.com"],
+    authors_email=["lamberson@yahoo.com"],
     maintainers=["Greg Lamberson"],
-    maintainers_email=["greg@aigenealogyinsights.com"],
+    maintainers_email=["lamberson@yahoo.com"],
     requires_mod=[],  # psycopg3 requirement handled separately
     requires_exe=[],  # No external executables required
     depends_on=[],  # No dependencies on other Gramps plugins
