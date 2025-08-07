@@ -86,6 +86,7 @@ from migration import MigrationManager
 from queries import EnhancedQueries
 from schema_columns import REQUIRED_COLUMNS
 from search_capabilities import SearchCapabilities, SearchAPI
+from concurrency import PostgreSQLConcurrency
 
 # -------------------------------------------------------------------------
 #
@@ -170,6 +171,7 @@ class PostgreSQLEnhanced(DBAPI):
         self.enhanced_queries = None
         self.search_capabilities = None
         self.search_api = None
+        self.concurrency = None
         self._use_jsonb = True  # Default to using JSONB
 
         # Initialize attributes that are set in _initialize
@@ -423,6 +425,14 @@ class PostgreSQLEnhanced(DBAPI):
         except Exception as e:
             LOG.warning(f"Could not initialize search capabilities: {e}")
             # Continue without advanced search features
+
+        # Initialize concurrency features
+        try:
+            self.concurrency = PostgreSQLConcurrency(self.dbapi)
+            LOG.info("Concurrency features initialized successfully")
+        except Exception as e:
+            LOG.warning(f"Could not initialize concurrency features: {e}")
+            # Continue without concurrency features
 
         # Log successful initialization
         LOG.info("PostgreSQL Enhanced initialized successfully")
@@ -823,19 +833,33 @@ class PostgreSQLEnhanced(DBAPI):
             raise RuntimeError(_("Enhanced queries require JSONB support"))
         return self.enhanced_queries.find_relationship_path(handle1, handle2, max_depth)
 
-    def search_all_text(self, search_term):
+    def search_all_text(self, search_term, limit=100):
         """
-        Full-text search across all text fields.
+        Full-text search across all text fields using modern PostgreSQL features.
+
+        Uses tsvector full-text search when available, with fallback to ILIKE.
 
         :param search_term: Text to search for
         :type search_term: str
-        :returns: Dictionary of search results by object type
-        :rtype: dict
-        :raises RuntimeError: If enhanced queries not available
+        :param limit: Maximum results to return
+        :type limit: int
+        :returns: List of search results
+        :rtype: list
         """
-        if not self.enhanced_queries:
-            raise RuntimeError(_("Enhanced queries require JSONB support"))
-        return self.enhanced_queries.search_all_text(search_term)
+        # Use modern SearchAPI with tsvector if available
+        if self.search_api:
+            return self.search_api.fulltext_search(
+                search_term, 
+                limit=limit,
+                obj_types=['person', 'family', 'event', 'place', 'source', 'note', 'citation', 'media', 'repository', 'tag']
+            )
+        
+        # Fallback to enhanced queries ILIKE search if JSONB enabled
+        elif self.enhanced_queries:
+            return self.enhanced_queries.search_all_text(search_term, limit)
+        
+        else:
+            raise RuntimeError(_("Full-text search requires JSONB support or search capabilities"))
 
     def get_statistics(self):
         """
@@ -854,6 +878,182 @@ class PostgreSQLEnhanced(DBAPI):
             stats.update(self.enhanced_queries.get_statistics())
 
         return stats
+
+    def get_descendants_tree(self, person_handle, max_depth=None):
+        """
+        Get complete descendants tree for a person.
+
+        :param person_handle: Root person's handle
+        :type person_handle: str
+        :param max_depth: Maximum generations to retrieve
+        :type max_depth: int
+        :returns: Hierarchical structure of descendants
+        :rtype: dict
+        :raises RuntimeError: If enhanced queries not available
+        """
+        if not self.enhanced_queries:
+            raise RuntimeError(_("Enhanced queries require JSONB support"))
+        return self.enhanced_queries.get_descendants_tree(person_handle, max_depth)
+
+    def find_potential_duplicates(self, threshold=0.8):
+        """
+        Find potential duplicate persons using name similarity.
+
+        Requires pg_trgm extension for trigram similarity.
+
+        :param threshold: Similarity threshold (0.0 to 1.0)
+        :type threshold: float
+        :returns: List of potential duplicate pairs
+        :rtype: list
+        :raises RuntimeError: If enhanced queries not available
+        """
+        if not self.enhanced_queries:
+            raise RuntimeError(_("Enhanced queries require JSONB support"))
+        return self.enhanced_queries.find_potential_duplicates(threshold)
+
+    # -------------------------------------------------------------------------
+    # Concurrency control methods
+    # -------------------------------------------------------------------------
+
+    def setup_real_time_notifications(self, channels=None):
+        """
+        Set up real-time notifications for multi-user collaboration.
+
+        :param channels: List of channels to listen on
+        :type channels: list[str]
+        :returns: Success status
+        :rtype: bool
+        """
+        if not self.concurrency:
+            return False
+        return self.concurrency.setup_listen_notify(channels)
+
+    def notify_object_change(self, obj_type, handle, change_type, payload=None):
+        """
+        Notify other users of object changes.
+
+        :param obj_type: Type of object (person, family, etc.)
+        :type obj_type: str
+        :param handle: Object handle
+        :type handle: str
+        :param change_type: Type of change (create, update, delete)
+        :type change_type: str
+        :param payload: Additional data to send
+        :type payload: dict
+        :returns: Success status
+        :rtype: bool
+        """
+        if not self.concurrency:
+            return False
+        return self.concurrency.notify_change(obj_type, handle, change_type, payload)
+
+    def add_change_listener(self, obj_type, callback):
+        """
+        Add a listener for object changes.
+
+        :param obj_type: Type of object to listen for
+        :type obj_type: str
+        :param callback: Function to call when changes occur
+        :type callback: callable
+        """
+        if self.concurrency:
+            self.concurrency.add_change_listener(obj_type, callback)
+
+    def acquire_object_lock(self, obj_type, handle, exclusive=True, timeout=5.0):
+        """
+        Acquire advisory lock on object for concurrent access control.
+
+        :param obj_type: Type of object
+        :type obj_type: str
+        :param handle: Object handle
+        :type handle: str
+        :param exclusive: Whether to acquire exclusive lock
+        :type exclusive: bool
+        :param timeout: Lock acquisition timeout in seconds
+        :type timeout: float
+        :returns: True if lock acquired successfully
+        :rtype: bool
+        """
+        if not self.concurrency:
+            return True  # Allow access if concurrency not available
+        return self.concurrency.acquire_object_lock(obj_type, handle, exclusive, timeout)
+
+    def release_object_lock(self, obj_type, handle):
+        """
+        Release advisory lock on object.
+
+        :param obj_type: Type of object
+        :type obj_type: str
+        :param handle: Object handle
+        :type handle: str
+        :returns: Success status
+        :rtype: bool
+        """
+        if not self.concurrency:
+            return True
+        return self.concurrency.release_object_lock(obj_type, handle)
+
+    def object_lock(self, obj_type, handle, exclusive=True, timeout=5.0):
+        """
+        Create a context manager for object locking.
+
+        Usage:
+            with db.object_lock('person', handle):
+                # Perform operations on the person object
+                person = db.get_person_from_handle(handle)
+                # ... modify person ...
+                db.commit_person(person, trans)
+
+        :param obj_type: Type of object
+        :type obj_type: str
+        :param handle: Object handle
+        :type handle: str
+        :param exclusive: Whether to acquire exclusive lock
+        :type exclusive: bool
+        :param timeout: Lock acquisition timeout
+        :type timeout: float
+        :returns: Context manager for the lock
+        """
+        if not self.concurrency:
+            # Return a dummy context manager that does nothing
+            class DummyLock:
+                def __enter__(self): return self
+                def __exit__(self, *args): pass
+            return DummyLock()
+        return self.concurrency.object_lock(obj_type, handle, exclusive, timeout)
+
+    def begin_transaction_with_isolation(self, isolation_level='READ_COMMITTED'):
+        """
+        Begin transaction with specific isolation level.
+
+        :param isolation_level: Isolation level (READ_UNCOMMITTED, READ_COMMITTED, REPEATABLE_READ, SERIALIZABLE)
+        :type isolation_level: str
+        :returns: Success status
+        :rtype: bool
+        """
+        if not self.concurrency:
+            # Fallback to basic transaction
+            try:
+                self.dbapi.execute("BEGIN")
+                return True
+            except Exception:
+                return False
+        return self.concurrency.begin_transaction(isolation_level)
+
+    def check_object_version(self, obj_type, handle, expected_version):
+        """
+        Check if object has been modified since expected version (optimistic concurrency control).
+
+        :param obj_type: Type of object
+        :type obj_type: str
+        :param handle: Object handle
+        :type handle: str
+        :param expected_version: Expected version timestamp
+        :type expected_version: float
+        :raises ConcurrencyError: If object was modified by another user
+        """
+        if self.concurrency:
+            self.concurrency.check_object_version(obj_type, handle, expected_version)
 
     def commit_person(self, person, trans, change_time=None):
         """

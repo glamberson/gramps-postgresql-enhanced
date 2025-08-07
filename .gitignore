@@ -55,3 +55,8 @@ debug.txt
 
 # Distribution packages
 *.addon.tgz
+
+# Ignore embedded git repositories  
+gramps-addons/
+gramps-addons-temp/
+gramps-web-api-source/
