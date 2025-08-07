@@ -49,4 +49,4 @@ shared_database_name = gramps_monolithic
 ## Support
 
 - GitHub Issues: https://github.com/glamberson/gramps-postgresql-enhanced/issues
-- Email: greg@aigenealogyinsights.com
+- Email: lamberson@yahoo.com

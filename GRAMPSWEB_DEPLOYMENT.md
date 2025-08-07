@@ -256,4 +256,4 @@ curl http://localhost:5000/api/trees/ \
 
 - PostgreSQL Enhanced issues: [GitHub](https://github.com/glamberson/gramps-postgresql-enhanced)
 - Gramps Web documentation: [grampsweb.org](https://www.grampsweb.org/)
-- Henderson project specific: greg@aigenealogyinsights.com
+- Henderson project specific: lamberson@yahoo.com
