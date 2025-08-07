@@ -1274,7 +1274,7 @@ class PostgreSQLEnhanced(DBAPI):
         # Add search vectors to all object tables
         for obj_type in ['person', 'family', 'event', 'place', 'source', 'citation', 
                         'repository', 'media', 'note', 'tag']:
-            table = self._get_table_name(obj_type)
+            table = self.schema._table_name(obj_type)
             
             try:
                 # Add search column if not exists
@@ -1367,7 +1367,7 @@ class PostgreSQLEnhanced(DBAPI):
         query_pattern = f"%{query}%"
         
         # Search persons
-        table = self._get_table_name('person')
+        table = self.schema._table_name('person')
         with self.dbapi.execute(f"""
             SELECT handle, gramps_id, json_data
             FROM {table}
