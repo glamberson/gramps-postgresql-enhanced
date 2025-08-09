@@ -152,7 +152,7 @@ class SearchCapabilities:
                 END as status
             FROM pg_available_extensions x
             LEFT JOIN pg_extension e ON x.name = e.extname
-            WHERE x.name IN %s
+            WHERE x.name = ANY(%s)
         """, (tuple(self.EXTENSIONS.keys()),)) as cur:
             
             for row in cur.fetchall():

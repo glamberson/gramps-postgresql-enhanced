@@ -38,7 +38,7 @@ register(
         "and AI/ML capabilities. For developers and advanced users only. "
         "Requires PostgreSQL 15+ with extensions. Gramps Web compatible."
     ),
-    version="1.4.0",  # Full Gramps Web compatibility with mode-aware metadata
+    version="1.5.0",  # GrampsWeb full compatibility: public metadata, transactions, concurrent fixes
     gramps_target_version="6.0",
     status=STABLE,
     audience=DEVELOPER,  # Developer-level experimental features
