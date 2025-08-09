@@ -311,18 +311,36 @@ class PostgreSQLEnhanced(DBAPI):
         
         # Check for monolithic mode first
         # Also detect if directory looks like a tree ID (8 hex chars)
+        # OR if it's a filesystem path ending with a tree ID
+        actual_tree_id = None
+        
+        # Extract tree ID from filesystem path if present
+        if directory and '/' in directory:
+            # Path like /root/.gramps/grampsdb/6894f36d
+            last_part = directory.rstrip('/').split('/')[-1]
+            # Check if it looks like a tree ID (8 chars, hex or similar format)
+            if last_part and (len(last_part) == 8 or '-' not in last_part):
+                # For now, accept any 8-char string as potential tree ID
+                # This handles both hex IDs and other formats
+                if len(last_part) <= 20:  # Reasonable limit for tree ID
+                    actual_tree_id = last_part
+                    LOG.info(f"Extracted tree ID '{actual_tree_id}' from path '{directory}'")
+        
+        # Check if directory itself is a tree ID
         is_tree_id = (
             directory and 
             len(directory) == 8 and 
             all(c in '0123456789abcdef' for c in directory.lower())
         )
         
-        if os.environ.get('POSTGRESQL_ENHANCED_MODE') == 'monolithic' or is_tree_id:
+        if os.environ.get('POSTGRESQL_ENHANCED_MODE') == 'monolithic' or is_tree_id or actual_tree_id:
             # In monolithic mode, build connection from environment variables
             config = self._build_config_from_env()
-            self.directory = directory  # Store tree_id
-            self.tree_id = directory  # Tree ID directly
-            self.table_prefix = f"tree_{directory}_"
+            self.directory = directory  # Store original path
+            # Use extracted tree ID if available, otherwise use directory
+            tree_id_to_use = actual_tree_id or directory
+            self.tree_id = tree_id_to_use  # Tree ID 
+            self.table_prefix = f"tree_{tree_id_to_use}_"
             self.shared_db_mode = True
             
             # Build connection string
@@ -1902,6 +1920,74 @@ class PostgreSQLEnhanced(DBAPI):
                     continue
                 else:
                     raise
+    
+    # ========================================================================
+    # Public Metadata Methods for GrampsWeb Compatibility
+    # ========================================================================
+    
+    def set_metadata(self, key, value):
+        """
+        Public wrapper for _set_metadata.
+        Required by GrampsWeb for metadata storage.
+        
+        :param key: Metadata key
+        :type key: str
+        :param value: Metadata value
+        :type value: Any
+        """
+        return self._set_metadata(key, value)
+    
+    def get_metadata(self, key, default=None):
+        """
+        Public wrapper for _get_metadata.
+        Required by GrampsWeb for metadata retrieval.
+        
+        :param key: Metadata key
+        :type key: str
+        :param default: Default value if key not found
+        :type default: Any
+        :returns: Metadata value or default
+        :rtype: Any
+        """
+        result = self._get_metadata(key, "_")
+        return default if result == "_" else result
+    
+    # ========================================================================
+    # Transaction History Support for GrampsWeb
+    # ========================================================================
+    
+    def get_transactions(self, page=1, pagesize=20, old_data=False, new_data=False,
+                        ascending=False, before=None, after=None):
+        """
+        Get transaction history with pagination.
+        Required by GrampsWeb API for /api/transactions/history/
+        
+        :param page: Page number (1-based)
+        :type page: int
+        :param pagesize: Number of transactions per page
+        :type pagesize: int
+        :param old_data: Include old data in transactions
+        :type old_data: bool
+        :param new_data: Include new data in transactions
+        :type new_data: bool
+        :param ascending: Sort ascending by timestamp
+        :type ascending: bool
+        :param before: Filter transactions before this timestamp
+        :type before: datetime or None
+        :param after: Filter transactions after this timestamp
+        :type after: datetime or None
+        :returns: Tuple of (transactions list, total count)
+        :rtype: tuple
+        """
+        # For now, return empty results to prevent errors
+        # TODO: Implement actual transaction history from undo table
+        transactions = []
+        total_count = 0
+        
+        # If we have undo data, we could query it here
+        # This would require querying the undo table with proper filtering
+        
+        return transactions, total_count
     
     # ========================================================================
     # Gramps Web Multi-Tree Support (Class Methods)
