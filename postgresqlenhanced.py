@@ -497,37 +497,40 @@ class PostgreSQLEnhanced(DBAPI):
     def load(
         self,
         directory,
-        _callback=None,
-        _mode=None,
-        _force_schema_upgrade=False,
-        _force_bsddb_upgrade=False,
-        _force_bsddb_downgrade=False,
-        _force_python_upgrade=False,
+        callback=None,
+        mode=None,
+        force_schema_upgrade=False,
+        force_bsddb_upgrade=False,
+        force_bsddb_downgrade=False,
+        force_python_upgrade=False,
+        update=True,
         user=None,
         password=None,
         username=None,
-        *_args,
-        **_kwargs,
+        *args,
+        **kwargs,
     ):
         """
-        Load database - Gramps compatibility method.
+        Load database - Gramps compatibility method v1.4.
 
-        Gramps calls this with various parameters, we only need directory, username, and password.
+        Enhanced for full Gramps Web compatibility while maintaining PostgreSQL-native design.
 
         :param directory: Path to database directory or connection string
         :type directory: str
         :param callback: Progress callback function (unused)
         :type callback: callable
-        :param mode: Database mode (unused)
+        :param mode: Database mode (DBMODE_R for read-only, DBMODE_W for read-write)
         :type mode: str
-        :param force_schema_upgrade: Force schema upgrade (unused)
+        :param force_schema_upgrade: Force schema upgrade (ignored - PostgreSQL handles this)
         :type force_schema_upgrade: bool
-        :param force_bsddb_upgrade: Force BSDDB upgrade (unused)
+        :param force_bsddb_upgrade: Force BSDDB upgrade (ignored)
         :type force_bsddb_upgrade: bool
-        :param force_bsddb_downgrade: Force BSDDB downgrade (unused)
+        :param force_bsddb_downgrade: Force BSDDB downgrade (ignored)
         :type force_bsddb_downgrade: bool
-        :param force_python_upgrade: Force Python upgrade (unused)
+        :param force_python_upgrade: Force Python upgrade (ignored)
         :type force_python_upgrade: bool
+        :param update: Whether to update files (kept for compatibility)
+        :type update: bool
         :param user: Database username (alternative to username)
         :type user: str
         :param password: Database password
@@ -538,13 +541,58 @@ class PostgreSQLEnhanced(DBAPI):
         :param kwargs: Additional keyword arguments (unused)
         :returns: Always returns True
         :rtype: bool
+        
+        .. versionchanged:: 1.4
+            Added full DBAPI compatibility attributes for Gramps Web.
         """
         # Handle both 'user' and 'username' parameters
         actual_username = username or user or None
         actual_password = password or None
+        
+        # Store original directory for later use
+        self._original_directory = directory
 
         # Call our initialize method
         self._initialize(directory, actual_username, actual_password)
+        
+        # ===== BLOCK 1: TRIVIAL FLAGS AND ATTRIBUTES =====
+        # CRITICAL: This flag is required for Gramps Web to work
+        self.db_is_open = True
+        
+        # Support read-only mode
+        from gramps.gen.db.dbconst import DBMODE_R
+        self.readonly = mode == DBMODE_R if mode else False
+        
+        # Initialize change tracking counter
+        self.has_changed = 0
+        
+        # Set minimal directory attributes for compatibility
+        self._directory = directory
+        self.path = directory  # Some Gramps code expects this
+        
+        # Set serializer (always JSON for PostgreSQL Enhanced)
+        self.set_serializer("json")
+        
+        # ===== END BLOCK 1 =====
+        
+        # ===== BLOCK 2: BOOKMARKS AND BASIC METADATA =====
+        # Initialize all bookmark collections (required for Gramps Web)
+        self._initialize_bookmarks()
+        
+        # Load name formats and researcher info
+        from gramps.gen.lib import Researcher
+        self.name_formats = self._get_metadata("name_formats", [])
+        self.owner = self._get_metadata("researcher", default=Researcher())
+        
+        # Initialize all custom type attributes
+        self._initialize_custom_types()
+        
+        # Load gender statistics
+        from gramps.gen.lib import GenderStats
+        gstats = self._get_metadata("gender_stats", {})
+        self.genderStats = GenderStats(gstats)
+        
+        # ===== END BLOCK 2 =====
 
         # Set up the undo manager without calling parent's full load
         # which tries to run upgrades on non-existent files
@@ -556,6 +604,67 @@ class PostgreSQLEnhanced(DBAPI):
 
         # Set proper version to avoid upgrade prompts
         self._set_metadata("version", "21")
+        
+        return True
+    
+    def _initialize_bookmarks(self):
+        """
+        Initialize all bookmark collections.
+        
+        .. versionadded:: 1.4
+            Required for Gramps Web compatibility.
+        """
+        # Initialize bookmark attributes if they don't exist
+        if not hasattr(self, 'bookmarks'):
+            from gramps.gen.utils.bookmarks import Bookmarks
+            self.bookmarks = Bookmarks()
+            self.family_bookmarks = Bookmarks()
+            self.event_bookmarks = Bookmarks()
+            self.source_bookmarks = Bookmarks()
+            self.citation_bookmarks = Bookmarks()
+            self.repo_bookmarks = Bookmarks()
+            self.media_bookmarks = Bookmarks()
+            self.place_bookmarks = Bookmarks()
+            self.note_bookmarks = Bookmarks()
+        
+        # Load bookmark data from metadata
+        self.bookmarks.load(self._get_metadata("bookmarks", []))
+        self.family_bookmarks.load(self._get_metadata("family_bookmarks", []))
+        self.event_bookmarks.load(self._get_metadata("event_bookmarks", []))
+        self.source_bookmarks.load(self._get_metadata("source_bookmarks", []))
+        self.citation_bookmarks.load(self._get_metadata("citation_bookmarks", []))
+        self.repo_bookmarks.load(self._get_metadata("repo_bookmarks", []))
+        self.media_bookmarks.load(self._get_metadata("media_bookmarks", []))
+        self.place_bookmarks.load(self._get_metadata("place_bookmarks", []))
+        self.note_bookmarks.load(self._get_metadata("note_bookmarks", []))
+    
+    def _initialize_custom_types(self):
+        """
+        Initialize all custom type attributes.
+        
+        These populate UI dropdowns in Gramps.
+        
+        .. versionadded:: 1.4
+            Required for Gramps Web UI functionality.
+        """
+        # Initialize all custom type attributes with empty sets as defaults
+        self.event_names = self._get_metadata("event_names", set())
+        self.family_attributes = self._get_metadata("fattr_names", set())
+        self.individual_attributes = self._get_metadata("pattr_names", set())
+        self.source_attributes = self._get_metadata("sattr_names", set())
+        self.marker_names = self._get_metadata("marker_names", set())
+        self.child_ref_types = self._get_metadata("child_refs", set())
+        self.family_rel_types = self._get_metadata("family_rels", set())
+        self.event_role_names = self._get_metadata("event_roles", set())
+        self.name_types = self._get_metadata("name_types", set())
+        self.origin_types = self._get_metadata("origin_types", set())
+        self.repository_types = self._get_metadata("repo_types", set())
+        self.note_types = self._get_metadata("note_types", set())
+        self.source_media_types = self._get_metadata("sm_types", set())
+        self.url_types = self._get_metadata("url_types", set())
+        self.media_attributes = self._get_metadata("mattr_names", set())
+        self.event_attributes = self._get_metadata("eattr_names", set())
+        self.place_types = self._get_metadata("place_types", set())
 
     def _read_config_file(self, config_path):
         """
