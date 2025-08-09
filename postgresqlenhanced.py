@@ -629,10 +629,27 @@ class PostgreSQLEnhanced(DBAPI):
 
         # Set up the undo manager without calling parent's full load
         # which tries to run upgrades on non-existent files
-        from gramps.gen.db.generic import DbGenericUndo
-
-        self.undolog = None
-        self.undodb = DbGenericUndo(self, self.undolog)
+        
+        # Detect if we're running under GrampsWeb
+        grampsweb_mode = self._detect_grampsweb_mode()
+        
+        if grampsweb_mode:
+            # Use our PostgreSQL undo that has get_transactions
+            try:
+                from .undo_postgresql import DbUndoPostgreSQL
+                self.undodb = DbUndoPostgreSQL(self, self.dbapi)
+                self.log.info("Using PostgreSQL-native undo system with transaction history")
+            except ImportError:
+                self.log.warning("Failed to import DbUndoPostgreSQL, falling back to generic")
+                from gramps.gen.db.generic import DbGenericUndo
+                self.undolog = None
+                self.undodb = DbGenericUndo(self, self.undolog)
+        else:
+            # Regular Gramps desktop - use standard undo for now
+            from gramps.gen.db.generic import DbGenericUndo
+            self.undolog = None
+            self.undodb = DbGenericUndo(self, self.undolog)
+            
         self.undodb.open()
 
         # Set proper version to avoid upgrade prompts
@@ -766,6 +783,30 @@ class PostgreSQLEnhanced(DBAPI):
         except Exception as e:
             LOG.warning(f"Failed to load surname list: {e}")
             return []
+    
+    def _detect_grampsweb_mode(self):
+        """
+        Detect if running under GrampsWeb without importing it.
+        
+        :returns: True if running under GrampsWeb, False otherwise
+        :rtype: bool
+        """
+        # Check for GrampsWeb-specific environment variables
+        if os.environ.get('GRAMPSWEB_TREE'):
+            return True
+        
+        # Check if gramps_webapi is in sys.modules (already imported)
+        import sys
+        if 'gramps_webapi' in sys.modules:
+            return True
+            
+        # Check call stack for GrampsWeb
+        import inspect
+        for frame_info in inspect.stack():
+            if 'gramps_webapi' in frame_info.filename:
+                return True
+                
+        return False
     
     def _update_recent_files(self):
         """
