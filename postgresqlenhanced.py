@@ -593,6 +593,21 @@ class PostgreSQLEnhanced(DBAPI):
         self.genderStats = GenderStats(gstats)
         
         # ===== END BLOCK 2 =====
+        
+        # ===== BLOCK 3: MODE-AWARE METADATA (ID COUNTERS & SURNAME LIST) =====
+        # Initialize ID counters with mode awareness (critical for monolithic mode)
+        self._initialize_id_counters()
+        
+        # Load surname list with mode awareness (must be isolated per tree)
+        self.surname_list = self._get_mode_aware_surname_list()
+        
+        # ===== END BLOCK 3 =====
+        
+        # ===== BLOCK 4: RECENT FILES TRACKING =====
+        # Update recent files to fix "Last Accessed: NEVER" issue
+        self._update_recent_files()
+        
+        # ===== END BLOCK 4 =====
 
         # Set up the undo manager without calling parent's full load
         # which tries to run upgrades on non-existent files
@@ -665,6 +680,117 @@ class PostgreSQLEnhanced(DBAPI):
         self.media_attributes = self._get_metadata("mattr_names", set())
         self.event_attributes = self._get_metadata("eattr_names", set())
         self.place_types = self._get_metadata("place_types", set())
+    
+    def _initialize_id_counters(self):
+        """
+        Initialize ID generation counters with mode awareness.
+        
+        In monolithic mode, each tree must have its own counters to prevent
+        ID collisions between trees.
+        
+        .. versionadded:: 1.4
+            Mode-aware ID counter initialization.
+        """
+        if hasattr(self, 'table_prefix') and self.table_prefix:
+            # Monolithic mode: prefix counters with tree ID
+            prefix = self.table_prefix.rstrip('_')
+            self.cmap_index = self._get_metadata(f"{prefix}_cmap_index", 0)
+            self.smap_index = self._get_metadata(f"{prefix}_smap_index", 0)
+            self.emap_index = self._get_metadata(f"{prefix}_emap_index", 0)
+            self.pmap_index = self._get_metadata(f"{prefix}_pmap_index", 0)
+            self.fmap_index = self._get_metadata(f"{prefix}_fmap_index", 0)
+            self.lmap_index = self._get_metadata(f"{prefix}_lmap_index", 0)
+            self.omap_index = self._get_metadata(f"{prefix}_omap_index", 0)
+            self.rmap_index = self._get_metadata(f"{prefix}_rmap_index", 0)
+            self.nmap_index = self._get_metadata(f"{prefix}_nmap_index", 0)
+        else:
+            # Separate mode: standard counters
+            self.cmap_index = self._get_metadata("cmap_index", 0)
+            self.smap_index = self._get_metadata("smap_index", 0)
+            self.emap_index = self._get_metadata("emap_index", 0)
+            self.pmap_index = self._get_metadata("pmap_index", 0)
+            self.fmap_index = self._get_metadata("fmap_index", 0)
+            self.lmap_index = self._get_metadata("lmap_index", 0)
+            self.omap_index = self._get_metadata("omap_index", 0)
+            self.rmap_index = self._get_metadata("rmap_index", 0)
+            self.nmap_index = self._get_metadata("nmap_index", 0)
+    
+    def _get_mode_aware_surname_list(self):
+        """
+        Get surname list with mode awareness.
+        
+        In monolithic mode, returns surnames only from the current tree's table.
+        In separate mode, returns surnames from the single person table.
+        
+        .. versionadded:: 1.4
+            Mode-aware surname list retrieval.
+        """
+        try:
+            if hasattr(self, 'table_prefix') and self.table_prefix:
+                # Monolithic mode: query only this tree's person table
+                table_name = f"{self.table_prefix}person"
+            else:
+                # Separate mode: standard person table
+                table_name = "person"
+            
+            query = f"""
+                SELECT DISTINCT 
+                    json_data->'primary_name'->>'surname' as surname
+                FROM {table_name}
+                WHERE json_data IS NOT NULL 
+                AND json_data->'primary_name'->>'surname' IS NOT NULL
+                AND json_data->'primary_name'->>'surname' != ''
+                ORDER BY surname
+            """
+            
+            result = self.dbapi.execute(query)
+            return [row[0] for row in result.fetchall()]
+        except Exception as e:
+            LOG.warning(f"Failed to load surname list: {e}")
+            return []
+    
+    def _update_recent_files(self):
+        """
+        Update Gramps' recent files tracking with current timestamp.
+        
+        Creates meaningful virtual PostgreSQL paths instead of filesystem paths.
+        Fixes the "Last Accessed: NEVER" issue.
+        
+        .. versionadded:: 1.4
+            Recent files tracking for PostgreSQL databases.
+        """
+        try:
+            from gramps.gen.recentfiles import recent_files
+            
+            # Create a meaningful virtual path for PostgreSQL
+            if hasattr(self, 'table_prefix') and self.table_prefix:
+                # Monolithic mode: use tree identifier
+                tree_id = self.table_prefix.rstrip('_').replace('tree_', '')
+                virtual_path = f"postgresql://monolithic/{tree_id}"
+                display_name = f"PostgreSQL Tree: {tree_id}"
+            else:
+                # Separate mode: use database/directory name
+                if hasattr(self, '_original_directory') and self._original_directory:
+                    if '/' in str(self._original_directory):
+                        db_name = self._original_directory.split('/')[-1]
+                    else:
+                        db_name = self._original_directory
+                else:
+                    db_name = "postgresql_db"
+                virtual_path = f"postgresql://separate/{db_name}"
+                display_name = f"PostgreSQL: {db_name}"
+            
+            # Get the tree name from metadata if available
+            tree_name = self._get_metadata("name", display_name)
+            
+            # Update recent files with current timestamp
+            recent_files(virtual_path, tree_name)
+            
+            LOG.debug(f"Updated recent files: {virtual_path} -> {tree_name}")
+            
+        except Exception as e:
+            # Don't fail the entire load if recent files update fails
+            LOG.warning(f"Could not update recent files tracking: {e}")
 
     def _read_config_file(self, config_path):
         """
