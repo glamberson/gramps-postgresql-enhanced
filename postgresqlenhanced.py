@@ -145,6 +145,8 @@ class PostgreSQLEnhanced(DBAPI):
     def __init__(self):
         """Initialize the PostgreSQL Enhanced backend."""
         super().__init__()
+        # Initialize logger
+        self.log = logging.getLogger(__name__)
         # Check psycopg3 availability
         if not PSYCOPG_AVAILABLE:
             raise ImportError(
