@@ -85,7 +85,7 @@ from schema import PostgreSQLSchema
 from migration import MigrationManager
 from queries import EnhancedQueries
 from schema_columns import REQUIRED_COLUMNS
-from search_capabilities import SearchCapabilities, SearchAPI
+# from search_capabilities import SearchCapabilities, SearchAPI  # TODO: Add when needed
 from concurrency import PostgreSQLConcurrency
 
 # -------------------------------------------------------------------------
@@ -307,18 +307,50 @@ class PostgreSQLEnhanced(DBAPI):
         :type password: str
         :raises DbConnectionError: If configuration cannot be loaded or connection fails
         """
+        LOG.info(f"_initialize called with directory='{directory}', POSTGRESQL_ENHANCED_MODE='{os.environ.get('POSTGRESQL_ENHANCED_MODE')}'")
+        
+        # Check for monolithic mode first
+        # Also detect if directory looks like a tree ID (8 hex chars)
+        is_tree_id = (
+            directory and 
+            len(directory) == 8 and 
+            all(c in '0123456789abcdef' for c in directory.lower())
+        )
+        
+        if os.environ.get('POSTGRESQL_ENHANCED_MODE') == 'monolithic' or is_tree_id:
+            # In monolithic mode, build connection from environment variables
+            config = self._build_config_from_env()
+            self.directory = directory  # Store tree_id
+            self.tree_id = directory  # Tree ID directly
+            self.table_prefix = f"tree_{directory}_"
+            self.shared_db_mode = True
+            
+            # Build connection string
+            connection_string = (
+                "postgresql://{}:{}@{}:{}/{}".format(
+                    config['user'],
+                    config['password'],
+                    config['host'],
+                    config['port'],
+                    config['database']
+                )
+            )
+            
+            LOG.info(
+                "Monolithic mode - Tree ID: '%s', Table prefix: '%s', Database: '%s'",
+                self.tree_id,
+                self.table_prefix,
+                config['database']
+            )
         # Check if this is a Gramps file-based path
         # (like /home/user/.local/share/gramps/grampsdb/xxx)
         # or a test directory with connection_info.txt
-        config_file = (
-            os.path.join(directory, "connection_info.txt") if directory else None
-        )
-        if (
+        elif (
             directory
             and os.path.isabs(directory)
             and (
                 "/grampsdb/" in directory
-                or (config_file and os.path.exists(config_file))
+                or (os.path.exists(os.path.join(directory, "connection_info.txt")))
             )
         ):
             # Extract tree name from path
@@ -414,14 +446,14 @@ class PostgreSQLEnhanced(DBAPI):
         
         # Initialize search capabilities
         try:
-            self.search_capabilities = SearchCapabilities(self.dbapi)
-            self.search_api = SearchAPI(self, self.search_capabilities)
+            # TODO: Re-enable when search_capabilities module is available
+            # self.search_capabilities = SearchCapabilities(self.dbapi)
+            # self.search_api = SearchAPI(self, self.search_capabilities)
+            # mode = 'monolithic' if self.table_prefix else 'separate'
+            # self.search_capabilities.setup_search_infrastructure(mode)
+            self.search_api = None  # Temporarily disabled
             
-            # Set up search infrastructure based on mode
-            mode = 'monolithic' if self.table_prefix else 'separate'
-            self.search_capabilities.setup_search_infrastructure(mode)
-            
-            LOG.info(f"Search capabilities initialized: {self.search_capabilities.search_level}")
+            LOG.info("Search capabilities temporarily disabled")
         except Exception as e:
             LOG.warning(f"Could not initialize search capabilities: {e}")
             # Continue without advanced search features
@@ -668,6 +700,22 @@ class PostgreSQLEnhanced(DBAPI):
             LOG.error("Error checking/creating database: %s", e)
             raise
 
+    def _build_config_from_env(self):
+        """
+        Build configuration from environment variables for monolithic mode.
+        
+        :return: Configuration dictionary
+        :rtype: dict
+        """
+        return {
+            'host': os.environ.get('GRAMPSWEB_POSTGRES_HOST', '192.168.10.90'),
+            'port': os.environ.get('GRAMPSWEB_POSTGRES_PORT', '5432'),
+            'database': os.environ.get('GRAMPSWEB_POSTGRES_DB', 'gramps_monolithic_v13_test'),
+            'user': os.environ.get('GRAMPSWEB_POSTGRES_USER', 'genealogy_user'),
+            'password': os.environ.get('GRAMPSWEB_POSTGRES_PASSWORD', 'GenealogyData2025'),
+            'database_mode': 'monolithic'
+        }
+    
     def _parse_connection_options(self, connection_string):
         """
         Parse connection options from the connection string.
