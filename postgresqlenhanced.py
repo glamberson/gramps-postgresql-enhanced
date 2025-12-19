@@ -148,6 +148,8 @@ class PostgreSQLEnhancedBase(DBAPI):
     def __init__(self, force_mode=None):
         """Initialize the PostgreSQL Enhanced backend."""
         super().__init__()
+        # Store forced mode (set by subclass)
+        self.force_mode = force_mode
         # Initialize logger
         self.log = logging.getLogger(__name__)
         # Check psycopg3 availability
