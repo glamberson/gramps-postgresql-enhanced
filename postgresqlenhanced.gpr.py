@@ -50,7 +50,7 @@ if PSYCOPG_AVAILABLE or locals().get("build_script"):
             "Recommended for most users. Uses table prefixes for multi-tree support. "
             "Requires PostgreSQL 15+ and psycopg 3+."
         ),
-        version="1.7.0",
+        version="1.7.3",
         gramps_target_version="6.0",
         status=STABLE,
         fname="postgresqlenhanced.py",
@@ -73,7 +73,7 @@ if PSYCOPG_AVAILABLE or locals().get("build_script"):
             "For advanced users requiring complete tree isolation. "
             "Requires PostgreSQL 15+ with CREATEDB privilege and psycopg 3+."
         ),
-        version="1.7.0",
+        version="1.7.3",
         gramps_target_version="6.0",
         status=STABLE,
         fname="postgresqlenhanced.py",
