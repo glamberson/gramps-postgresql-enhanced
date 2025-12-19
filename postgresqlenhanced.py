@@ -493,6 +493,64 @@ class PostgreSQLEnhanced(DBAPI):
         self.readonly = False
         self._is_open = True
 
+    def json_extract_expression(self, json_column, json_path):
+        """
+        Generate PostgreSQL-specific JSON extraction expression.
+
+        Converts JSONPath notation to PostgreSQL JSONB operators.
+
+        :param json_column: Name of the JSON column
+        :type json_column: str
+        :param json_path: JSONPath expression (e.g., '$.type' or '$.date.sort')
+        :type json_path: str
+        :returns: PostgreSQL JSONB extraction expression
+        :rtype: str
+        """
+        path = json_path.strip("$").strip(".")
+
+        if not path:
+            return json_column
+
+        # Parse path into components
+        parts = []
+        current = ""
+        in_bracket = False
+
+        for char in path:
+            if char == "[":
+                if current:
+                    parts.append(("key", current))
+                    current = ""
+                in_bracket = True
+            elif char == "]":
+                parts.append(("index", current))
+                current = ""
+                in_bracket = False
+            elif char == "." and not in_bracket:
+                if current:
+                    parts.append(("key", current))
+                    current = ""
+            else:
+                current += char
+
+        if current:
+            parts.append(("key", current))
+
+        # Build PostgreSQL JSONB expression
+        expr = json_column
+        for i, (ptype, value) in enumerate(parts):
+            is_last = i == len(parts) - 1
+
+            if ptype == "key":
+                if is_last:
+                    expr = "(%s->>%s)" % (expr, repr(value))
+                else:
+                    expr = "(%s->%s)" % (expr, repr(value))
+            elif ptype == "index":
+                expr = "(%s->%s)" % (expr, value)
+
+        return expr
+
     def is_open(self):
         """
         Return True if the database is open.
