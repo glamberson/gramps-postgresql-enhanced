@@ -60,3 +60,11 @@ debug.txt
 gramps-addons/
 gramps-addons-temp/
 gramps-web-api-source/
+# Local analysis and notes (not for repo)
+*_NOTES.txt
+STATUS.txt
+UPDATE_SUMMARY.txt
+WORK_COMPLETE.txt
+VERSIONING_CONFLICT.txt
+INSTALLATION_STATUS.txt
+TESTING_INSTRUCTIONS.txt
