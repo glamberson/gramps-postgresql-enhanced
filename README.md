@@ -255,9 +255,11 @@ shared_database_name = gramps_monolithic
 
 ## Creating a Family Tree
 
+**IMPORTANT**: Before creating your first tree, the `connection_info.txt` file must be in the correct location. For monolithic mode (recommended), this is the **plugin directory**, NOT the tree directory.
+
 ### Step 1: Configure the Connection
 
-Before creating a tree, ensure your `connection_info.txt` is properly configured:
+Before creating a tree, ensure your `connection_info.txt` is properly configured and in the correct location:
 
 ```bash
 # Edit the configuration file
