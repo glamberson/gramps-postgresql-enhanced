@@ -67,16 +67,17 @@ host = localhost
 port = 5432
 user = genealogy_user
 password = YourPassword
-database_mode = monolithic
-shared_database_name = gramps_monolithic
+shared_database_name = gramps_shared
 ```
 
-**Note**: Monolithic mode requires the config in the plugin directory so all trees can share the same database connection.
+**Note**: Mode (Monolithic vs Separate) is selected when creating the tree - choose "PostgreSQL Enhanced (Monolithic)" or "PostgreSQL Enhanced (Separate)" from the backend dropdown.
 
 ### 5. Install in Gramps
 1. Copy this folder to: `~/.local/share/gramps/gramps60/plugins/PostgreSQLEnhanced/`
 2. Restart Gramps
-3. Create new tree with "PostgreSQL Enhanced" backend
+3. Create new tree with backend:
+   - "PostgreSQL Enhanced (Monolithic)" - recommended
+   - "PostgreSQL Enhanced (Separate)" - advanced users
 
 ## Troubleshooting
 
@@ -99,8 +100,8 @@ If not found, see Step 2 above for platform-specific installation.
 ### Connection fails or uses wrong host/port
 
 **Check config file location:**
-- Monolithic mode: Config must be in PLUGIN directory (see Step 4)
-- Separate mode: Config must be in PLUGIN directory (per-tree not yet supported)
+- Config must be in PLUGIN directory (see Step 4)
+- Both modes use the same central config file
 
 **Enable debug logging:**
 
