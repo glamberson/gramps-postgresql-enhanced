@@ -329,7 +329,15 @@ class PostgreSQLSchema:
 
         # Then add our enhanced indexes for better performance
         if obj_type == "person":
-            # Name searches
+            # Composite index for name searches (required by Gramps 6.0.6+)
+            self.conn.execute(
+                f"""
+                CREATE INDEX IF NOT EXISTS idx_{self.table_prefix}person_name_composite
+                    ON {self._table_name('person')} (surname, given_name)
+            """
+            )
+
+            # Name searches (JSONB)
             self.conn.execute(
                 f"""
                 CREATE INDEX IF NOT EXISTS idx_{self.table_prefix}person_names

@@ -22,14 +22,26 @@
 PostgreSQL Enhanced Database Backend Registration
 """
 
+import importlib
+
 from gramps.gen.plug._pluginreg import register, STABLE, DATABASE, DEVELOPER
 from gramps.gen.const import GRAMPS_LOCALE as glocale
 
 _ = glocale.translation.gettext
 
-register(
-    DATABASE,
-    id="postgresqlenhanced",
+# Check for psycopg3 availability before registering
+try:
+    import importlib.util
+
+    PSYCOPG_AVAILABLE = importlib.util.find_spec("psycopg") is not None
+except (ImportError, ValueError, AttributeError):
+    PSYCOPG_AVAILABLE = False
+
+# Only register if dependency available or building addon
+if PSYCOPG_AVAILABLE or locals().get("build_script"):
+    register(
+        DATABASE,
+        id="postgresqlenhanced",
     name=_("PostgreSQL Enhanced"),
     name_accell=_("PostgreSQL _Enhanced Database"),
     description=_(
@@ -38,7 +50,7 @@ register(
         "and AI/ML capabilities. For developers and advanced users only. "
         "Requires PostgreSQL 15+ with extensions. Gramps Web compatible."
     ),
-    version="1.5.1",  # Fixed VARCHAR(255) truncation, automatic migration for existing databases
+    version="1.6.0",
     gramps_target_version="6.0",
     status=STABLE,
     audience=DEVELOPER,  # Developer-level experimental features
@@ -52,6 +64,4 @@ register(
     requires_exe=[],  # No external executables required
     depends_on=[],  # No dependencies on other Gramps plugins
     help_url="https://github.com/gramps-project/addons-source/wiki/PostgreSQLEnhanced",
-    # Note: features attribute may not be supported in all Gramps versions
-    # Capabilities: monolithic-mode, separate-mode, grampsweb-compatible, jsonb-storage
-)
+    )

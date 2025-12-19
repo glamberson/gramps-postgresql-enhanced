@@ -2,10 +2,16 @@
 
 A high-performance PostgreSQL database backend for Gramps genealogy software that provides advanced database capabilities and superior performance for genealogical data management while maintaining full compatibility with the Gramps data model.
 
-**Version:** 1.5.1  
+**Version:** 1.6.0  
 **Project Status:** Experimental - Rigorous testing completed | [GitHub Repository](https://github.com/glamberson/gramps-postgresql-enhanced) | [Submit Issues](https://github.com/glamberson/gramps-postgresql-enhanced/issues)
 
 ## Recent Updates
+
+### Version 1.6.0 (2025-12-19)
+- **Gramps 6.0.6 compatibility** - Added required json_extract_expression() method
+- **Import guard** - Prevents registration when psycopg not available
+- **Performance index** - Added person_name_composite index for faster name searches
+- **Better error messages** - Clear guidance when dependencies missing
 
 ### Version 1.5.1 (2025-08-11)
 - **Fixed VARCHAR(255) truncation issue** - All string fields now use TEXT type to match SQLite behavior
