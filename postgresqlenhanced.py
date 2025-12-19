@@ -293,211 +293,155 @@ class PostgreSQLEnhancedBase(DBAPI):
 
     def _initialize(self, directory, username, password):
         """
-        Initialize the PostgreSQL Enhanced database connection.
+        Initialize PostgreSQL Enhanced using Gramps standard ConfigManager.
 
-        The 'directory' parameter contains connection information:
-
-        * postgresql://user:pass@host:port/dbname
-        * host:port:dbname:schema
-        * dbname (for local connection)
-
-        Special features can be enabled via query parameters:
-
-        * ?use_jsonb=false  (disable JSONB, use blob only)
-        * ?pool_size=10     (connection pool size)
-
-        :param directory: Path to database directory or connection string
+        :param directory: Path to database directory
         :type directory: str
-        :param username: Database username (may be overridden by config)
+        :param username: Database username (overrides config)
         :type username: str
-        :param password: Database password (may be overridden by config)
+        :param password: Database password (overrides config)
         :type password: str
         :raises DbConnectionError: If configuration cannot be loaded or connection fails
         """
-        LOG.info(f"_initialize called with directory='{directory}', POSTGRESQL_ENHANCED_MODE='{os.environ.get('POSTGRESQL_ENHANCED_MODE')}'")
-        
-        # Check for monolithic mode first
-        # Also detect if directory looks like a tree ID (8 hex chars)
-        # OR if it's a filesystem path ending with a tree ID
-        actual_tree_id = None
-        
-        # Extract tree ID from filesystem path if present
-        if directory and '/' in directory:
-            # Path like /root/.gramps/grampsdb/6894f36d
-            last_part = directory.rstrip('/').split('/')[-1]
-            # Check if it looks like a tree ID (8 chars, hex or similar format)
-            if last_part and (len(last_part) == 8 or '-' not in last_part):
-                # For now, accept any 8-char string as potential tree ID
-                # This handles both hex IDs and other formats
-                if len(last_part) <= 20:  # Reasonable limit for tree ID
-                    actual_tree_id = last_part
-                    LOG.info(f"Extracted tree ID '{actual_tree_id}' from path '{directory}'")
-        
-        # Check if directory itself is a tree ID
-        is_tree_id = (
-            directory and
-            len(directory) == 8 and
-            all(c in '0123456789abcdef' for c in directory.lower())
-        )
+        from gramps.gen.utils.configmanager import ConfigManager
+        from gramps.gen.config import config as global_config
 
-        # Only use environment variable config if explicitly set
-        # Otherwise use file-based config even if tree ID detected
+        # Extract tree ID from directory
+        tree_id = os.path.basename(directory.rstrip('/'))
+        self.directory = directory
+        self.tree_id = tree_id
+        self.path = directory
+
+        LOG.info("Initializing tree '%s' with force_mode='%s'", tree_id, self.force_mode)
+
+        # Check for GrampsWeb environment variable mode
         explicit_env_mode = os.environ.get('POSTGRESQL_ENHANCED_MODE') == 'monolithic'
 
         if explicit_env_mode:
             # GrampsWeb mode - use environment variables
-            config = self._build_config_from_env()
-            self.directory = directory  # Store original path
-            # Use extracted tree ID if available, otherwise use directory
-            tree_id_to_use = actual_tree_id or directory
-            self.tree_id = tree_id_to_use  # Tree ID 
-            self.table_prefix = f"tree_{tree_id_to_use}_"
+            config_dict = self._build_config_from_env()
+            host = config_dict['host']
+            port = config_dict['port']
+            db_user = config_dict['user']
+            actual_password = config_dict['password']
+            db_name = config_dict['database']
+
+            self.table_prefix = f"tree_{tree_id}_"
             self.shared_db_mode = True
-            
-            # Build connection string
-            connection_string = (
-                "postgresql://{}:{}@{}:{}/{}".format(
-                    config['user'],
-                    config['password'],
-                    config['host'],
-                    config['port'],
-                    config['database']
-                )
-            )
-            
-            LOG.info(
-                "Environment variable mode - Tree ID: '%s', Table prefix: '%s', Database: '%s'",
-                self.tree_id,
-                self.table_prefix,
-                config['database']
-            )
-        # Standard Gramps mode - use connection_info.txt from plugin directory
-        # Handles both tree IDs and full paths
-        elif is_tree_id or actual_tree_id or (
-            directory
-            and os.path.isabs(directory)
-            and "/grampsdb/" in directory
-        ):
-            # Extract tree name from path
-            path_parts = directory.rstrip("/").split("/")
-            tree_name = path_parts[-1] if path_parts else "gramps_default"
 
-            # Store directory for config file lookup
-            self.directory = directory
+            LOG.info("Environment variable mode - database=%s, prefix=%s", db_name, self.table_prefix)
 
-            # Load connection configuration
-            config = self._load_connection_config(directory)
+        else:
+            # Standard Gramps mode - use ConfigManager
+            config_file = os.path.join(directory, 'settings.ini')
+            config_mgr = ConfigManager(config_file)
 
-            # Determine mode: forced by class, from config, or default
-            if self.force_mode:
-                mode = self.force_mode
-            else:
-                mode = config.get("database_mode", "monolithic")
+            # Register configuration keys
+            config_mgr.register('database.host', 'localhost')
+            config_mgr.register('database.port', 5432)
+            config_mgr.register('database.user', 'gramps_user')
+            config_mgr.register('database.shared-database', 'gramps_shared')
+            config_mgr.register('database.pool-size', 5)
 
-            if mode == "separate":
-                # Separate database per tree
-                db_name = tree_name
+            # Load or create configuration
+            if not os.path.exists(config_file):
+                LOG.info("Creating settings.ini for tree %s", tree_id)
+
+                # Check for connection_info.txt migration
+                plugin_dir = os.path.dirname(os.path.abspath(__file__))
+                old_config_file = os.path.join(plugin_dir, 'connection_info.txt')
+
+                if os.path.exists(old_config_file):
+                    # Migrate from connection_info.txt
+                    LOG.info("Migrating from connection_info.txt")
+                    old_config = self._read_config_file(old_config_file)
+
+                    config_mgr.set('database.host', old_config.get('host', 'localhost'))
+                    config_mgr.set('database.port', int(old_config.get('port', '5432')))
+                    config_mgr.set('database.user', old_config.get('user', 'gramps_user'))
+                    config_mgr.set('database.shared-database',
+                                  old_config.get('shared_database_name', 'gramps_shared'))
+                    config_mgr.set('database.pool-size', int(old_config.get('pool_size', '5')))
+                else:
+                    # Use defaults from global Gramps config
+                    LOG.info("Using defaults from global Gramps preferences")
+                    config_mgr.set('database.host',
+                                  global_config.get('database.host') or 'localhost')
+                    port_str = global_config.get('database.port') or '5432'
+                    config_mgr.set('database.port',
+                                  int(port_str) if port_str else 5432)
+                    config_mgr.set('database.user', 'gramps_user')
+                    config_mgr.set('database.shared-database', 'gramps_shared')
+                    config_mgr.set('database.pool-size', 5)
+
+                config_mgr.save()
+                LOG.info("Created settings.ini at %s", config_file)
+
+            # Load configuration
+            config_mgr.load()
+
+            # Get connection parameters from settings.ini
+            host = config_mgr.get('database.host')
+            port = config_mgr.get('database.port')
+            db_user = config_mgr.get('database.user')
+
+            # Determine database name based on force_mode
+            if self.force_mode == 'separate':
+                db_name = tree_id
                 self.table_prefix = ""
                 self.shared_db_mode = False
-
-                # Try to create database if it doesn't exist
-                if config.get("user") and config.get("password"):
-                    self._ensure_database_exists(db_name, config)
+                LOG.info("Separate mode: database=%s", db_name)
             else:
-                # Shared database with table prefixes
-                db_name = config.get("shared_database_name", "gramps_shared")
-                # Sanitize tree name for use as table prefix
-                # Ensure prefix starts with 'tree_' to avoid PostgreSQL identifier issues
-                # (identifiers can't start with numbers)
-                safe_tree_name = re.sub(r"[^a-zA-Z0-9_]", "_", tree_name)
-                self.table_prefix = "tree_%s_" % safe_tree_name
+                db_name = config_mgr.get('database.shared-database') or 'gramps_shared'
+                safe_tree_id = re.sub(r"[^a-zA-Z0-9_]", "_", tree_id)
+                self.table_prefix = f"tree_{safe_tree_id}_"
                 self.shared_db_mode = True
-                LOG.info(
-                    "Using shared database mode with prefix: %s", self.table_prefix
-                )
+                LOG.info("Monolithic mode: database=%s, prefix=%s", db_name, self.table_prefix)
 
-            # Build connection string
-            connection_string = (
-                "postgresql://%s:%s@%s:%s/%s" % (
-                    config['user'],
-                    config['password'],
-                    config['host'],
-                    config['port'],
-                    db_name
-                )
-            )
+            # Username/password from parameters override config
+            # (password never stored in settings.ini for security)
+            actual_password = password or ''
 
-            LOG.info(
-                "Tree name: '%s', Database: '%s', Mode: '%s'",
-                tree_name,
-                db_name,
-                config["database_mode"],
-            )
-        else:
-            # Direct connection string
-            connection_string = directory
-            self.table_prefix = ""
-            self.shared_db_mode = False
+        # Override username if provided as parameter
+        actual_user = username or db_user or 'gramps_user'
+
+        # Build connection string
+        connection_string = f"postgresql://{actual_user}:{actual_password}@{host}:{port}/{db_name}"
 
         # Parse connection options
         self._parse_connection_options(connection_string)
 
-        # Store path for compatibility
-        self.path = directory
-
         # Create connection
         try:
-            self.dbapi = PostgreSQLConnection(connection_string, username, password)
+            self.dbapi = PostgreSQLConnection(connection_string, actual_user, actual_password)
 
             # In monolithic mode, wrap the connection to add table prefixes
-            if hasattr(self, "table_prefix") and self.table_prefix:
+            if self.table_prefix:
                 self.dbapi = TablePrefixWrapper(self.dbapi, self.table_prefix)
 
         except Exception as e:
             raise DbConnectionError(str(e), connection_string) from e
 
-        # Set serializer - DBAPI expects JSONSerializer
-        # JSONSerializer has object_to_data method that DBAPI needs
+        # Set serializer
         self.serializer = JSONSerializer()
 
-        # Initialize schema with table prefix if in shared mode
+        # Initialize schema
         schema = PostgreSQLSchema(
             self.dbapi,
             use_jsonb=self._use_jsonb,
-            table_prefix=getattr(self, "table_prefix", ""),
+            table_prefix=self.table_prefix,
         )
         schema.check_and_init_schema()
 
-        # Initialize migration manager
+        # Initialize components
         self.migration_manager = MigrationManager(self.dbapi)
 
-        # Initialize enhanced queries if JSONB is enabled
         if self._use_jsonb:
             self.enhanced_queries = EnhancedQueries(self.dbapi)
-        
-        # Initialize search capabilities
-        try:
-            # TODO: Re-enable when search_capabilities module is available
-            # self.search_capabilities = SearchCapabilities(self.dbapi)
-            # self.search_api = SearchAPI(self, self.search_capabilities)
-            # mode = 'monolithic' if self.table_prefix else 'separate'
-            # self.search_capabilities.setup_search_infrastructure(mode)
-            self.search_api = None  # Temporarily disabled
-            
-            LOG.info("Search capabilities temporarily disabled")
-        except Exception as e:
-            LOG.warning(f"Could not initialize search capabilities: {e}")
-            # Continue without advanced search features
 
-        # Initialize concurrency features
-        try:
-            self.concurrency = PostgreSQLConcurrency(self.dbapi)
-            LOG.info("Concurrency features initialized successfully")
-        except Exception as e:
-            LOG.warning(f"Could not initialize concurrency features: {e}")
-            # Continue without concurrency features
+        self.concurrency = PostgreSQLConcurrency(self.dbapi)
 
-        # Log successful initialization
+        # Log success
         LOG.info("PostgreSQL Enhanced initialized successfully")
 
         # Set database as writable
