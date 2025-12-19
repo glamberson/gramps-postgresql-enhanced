@@ -330,13 +330,17 @@ class PostgreSQLEnhanced(DBAPI):
         
         # Check if directory itself is a tree ID
         is_tree_id = (
-            directory and 
-            len(directory) == 8 and 
+            directory and
+            len(directory) == 8 and
             all(c in '0123456789abcdef' for c in directory.lower())
         )
-        
-        if os.environ.get('POSTGRESQL_ENHANCED_MODE') == 'monolithic' or is_tree_id or actual_tree_id:
-            # In monolithic mode, build connection from environment variables
+
+        # Only use environment variable config if explicitly set
+        # Otherwise use file-based config even if tree ID detected
+        explicit_env_mode = os.environ.get('POSTGRESQL_ENHANCED_MODE') == 'monolithic'
+
+        if explicit_env_mode:
+            # GrampsWeb mode - use environment variables
             config = self._build_config_from_env()
             self.directory = directory  # Store original path
             # Use extracted tree ID if available, otherwise use directory
@@ -357,21 +361,17 @@ class PostgreSQLEnhanced(DBAPI):
             )
             
             LOG.info(
-                "Monolithic mode - Tree ID: '%s', Table prefix: '%s', Database: '%s'",
+                "Environment variable mode - Tree ID: '%s', Table prefix: '%s', Database: '%s'",
                 self.tree_id,
                 self.table_prefix,
                 config['database']
             )
-        # Check if this is a Gramps file-based path
-        # (like /home/user/.local/share/gramps/grampsdb/xxx)
-        # or a test directory with connection_info.txt
-        elif (
+        # Standard Gramps mode - use connection_info.txt from plugin directory
+        # Handles both tree IDs and full paths
+        elif is_tree_id or actual_tree_id or (
             directory
             and os.path.isabs(directory)
-            and (
-                "/grampsdb/" in directory
-                or (os.path.exists(os.path.join(directory, "connection_info.txt")))
-            )
+            and "/grampsdb/" in directory
         ):
             # Extract tree name from path
             path_parts = directory.rstrip("/").split("/")
