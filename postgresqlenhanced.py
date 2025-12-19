@@ -391,6 +391,15 @@ class PostgreSQLEnhancedBase(DBAPI):
                 self.table_prefix = ""
                 self.shared_db_mode = False
                 LOG.info("Separate mode: database=%s", db_name)
+
+                # Try to create database if it doesn't exist
+                config_dict = {
+                    'host': host,
+                    'port': port,
+                    'user': db_user,
+                    'password': password or ''
+                }
+                self._ensure_database_exists(db_name, config_dict)
             else:
                 db_name = config_mgr.get('database.shared-database') or 'gramps_shared'
                 safe_tree_id = re.sub(r"[^a-zA-Z0-9_]", "_", tree_id)
