@@ -39,6 +39,29 @@ except (ImportError, ValueError, AttributeError):
 
 # Only register if dependency available or building addon
 if PSYCOPG_AVAILABLE or locals().get("build_script"):
+    # Register legacy ID for backward compatibility with existing trees
+    register(
+        DATABASE,
+        id="postgresqlenhanced",
+        name=_("PostgreSQL Enhanced"),
+        name_accell=_("PostgreSQL _Enhanced"),
+        description=_(
+            "Legacy registration for existing trees. "
+            "For new trees, use Monolithic or Separate mode. "
+            "Defaults to Monolithic mode."
+        ),
+        version="1.7.0",
+        gramps_target_version="6.0",
+        status=STABLE,
+        fname="postgresqlenhanced.py",
+        databaseclass="PostgreSQLEnhancedMonolithic",
+        authors=["Greg Lamberson"],
+        authors_email=["lamberson@yahoo.com"],
+        maintainers=["Greg Lamberson"],
+        maintainers_email=["lamberson@yahoo.com"],
+        help_url="https://github.com/glamberson/gramps-postgresql-enhanced",
+    )
+
     # Register Monolithic mode - all trees share one database
     register(
         DATABASE,
