@@ -131,18 +131,21 @@ if DEBUG_ENABLED:
 
 # ------------------------------------------------------------
 #
-# PostgreSQLEnhanced
+# PostgreSQLEnhancedBase - Shared implementation
 #
 # ------------------------------------------------------------
-class PostgreSQLEnhanced(DBAPI):
+class PostgreSQLEnhancedBase(DBAPI):
     """
-    PostgreSQL Enhanced interface for Gramps.
+    PostgreSQL Enhanced base implementation for Gramps.
 
     Provides advanced PostgreSQL features while maintaining
     full compatibility with the standard Gramps DBAPI interface.
+
+    This is the base class - use PostgreSQLEnhancedMonolithic or
+    PostgreSQLEnhancedSeparate subclasses.
     """
 
-    def __init__(self):
+    def __init__(self, force_mode=None):
         """Initialize the PostgreSQL Enhanced backend."""
         super().__init__()
         # Initialize logger
@@ -383,7 +386,13 @@ class PostgreSQLEnhanced(DBAPI):
             # Load connection configuration
             config = self._load_connection_config(directory)
 
-            if config["database_mode"] == "separate":
+            # Determine mode: forced by class, from config, or default
+            if self.force_mode:
+                mode = self.force_mode
+            else:
+                mode = config.get("database_mode", "monolithic")
+
+            if mode == "separate":
                 # Separate database per tree
                 db_name = tree_name
                 self.table_prefix = ""
@@ -2540,3 +2549,34 @@ class CursorPrefixWrapper:
         :rtype: object
         """
         return getattr(self._cursor, name)
+
+
+# ------------------------------------------------------------
+#
+# Mode-specific wrapper classes
+#
+# ------------------------------------------------------------
+class PostgreSQLEnhancedMonolithic(PostgreSQLEnhancedBase):
+    """
+    PostgreSQL Enhanced with Monolithic mode.
+
+    All family trees share one PostgreSQL database with table prefixes.
+    Recommended for most users.
+    """
+
+    def __init__(self):
+        """Initialize with monolithic mode forced."""
+        super().__init__(force_mode="monolithic")
+
+
+class PostgreSQLEnhancedSeparate(PostgreSQLEnhancedBase):
+    """
+    PostgreSQL Enhanced with Separate mode.
+
+    Each family tree gets its own PostgreSQL database.
+    For advanced users requiring complete tree isolation.
+    """
+
+    def __init__(self):
+        """Initialize with separate mode forced."""
+        super().__init__(force_mode="separate")
