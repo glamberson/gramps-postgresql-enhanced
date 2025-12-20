@@ -100,8 +100,16 @@ class PostgreSQLConnection:
         else:
             self._create_connection(conninfo)
 
-        # Set up the connection
-        self._setup_connection()
+        # Set up the connection (create helper functions)
+        # This may fail if user lacks CREATE FUNCTION privilege
+        try:
+            self._setup_connection()
+        except Exception as e:
+            self.log.warning(
+                "Could not create helper functions (regexp): %s. "
+                "Some search features may be limited.", e
+            )
+            # Continue without helper functions - core functionality still works
 
         # Configure JSONB handling for Gramps compatibility
         self._setup_jsonb_handling()

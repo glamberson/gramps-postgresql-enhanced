@@ -431,31 +431,50 @@ class PostgreSQLEnhancedBase(DBAPI):
         except Exception as e:
             raise DbConnectionError(str(e), connection_string) from e
 
-        # Set serializer
-        self.serializer = JSONSerializer()
+        # Initialize components - wrapped in try/finally to ensure connection cleanup
+        try:
+            # Set serializer
+            self.serializer = JSONSerializer()
 
-        # Initialize schema
-        schema = PostgreSQLSchema(
-            self.dbapi,
-            use_jsonb=self._use_jsonb,
-            table_prefix=self.table_prefix,
-        )
-        schema.check_and_init_schema()
+            # Initialize schema
+            schema = PostgreSQLSchema(
+                self.dbapi,
+                use_jsonb=self._use_jsonb,
+                table_prefix=self.table_prefix,
+            )
+            schema.check_and_init_schema()
 
-        # Initialize components
-        self.migration_manager = MigrationManager(self.dbapi)
+            # Initialize migration manager
+            self.migration_manager = MigrationManager(self.dbapi)
 
-        if self._use_jsonb:
-            self.enhanced_queries = EnhancedQueries(self.dbapi)
+            # Initialize enhanced queries if JSONB is enabled
+            if self._use_jsonb:
+                self.enhanced_queries = EnhancedQueries(self.dbapi)
 
-        self.concurrency = PostgreSQLConcurrency(self.dbapi)
+            # Initialize concurrency features (graceful degradation if fails)
+            try:
+                self.concurrency = PostgreSQLConcurrency(self.dbapi)
+                LOG.debug("Concurrency features initialized")
+            except Exception as e:
+                LOG.warning("Could not initialize concurrency features: %s", e)
+                self.concurrency = None
 
-        # Log success
-        LOG.info("PostgreSQL Enhanced initialized successfully")
+            # Log success
+            LOG.info("PostgreSQL Enhanced initialized successfully")
 
-        # Set database as writable
-        self.readonly = False
-        self._is_open = True
+            # Set database as writable
+            self.readonly = False
+            self._is_open = True
+
+        except Exception as e:
+            # Clean up connection on initialization failure
+            LOG.error("Initialization failed, closing connection: %s", e)
+            if hasattr(self, 'dbapi') and self.dbapi:
+                try:
+                    self.dbapi.close()
+                except Exception:
+                    pass  # Ignore errors during cleanup
+            raise
 
     def json_extract_expression(self, json_column, json_path):
         """
@@ -1022,15 +1041,18 @@ class PostgreSQLEnhancedBase(DBAPI):
         """
         Build configuration from environment variables for monolithic mode.
 
+        Used by GrampsWeb when POSTGRESQL_ENHANCED_MODE=monolithic is set.
+        All GRAMPSWEB_POSTGRES_* environment variables should be configured.
+
         :return: Configuration dictionary
         :rtype: dict
         """
         return {
-            'host': os.environ.get('GRAMPSWEB_POSTGRES_HOST', '192.168.10.90'),
+            'host': os.environ.get('GRAMPSWEB_POSTGRES_HOST', 'localhost'),
             'port': os.environ.get('GRAMPSWEB_POSTGRES_PORT', '5432'),
-            'database': os.environ.get('GRAMPSWEB_POSTGRES_DB', 'gramps_monolithic_v13_test'),
-            'user': os.environ.get('GRAMPSWEB_POSTGRES_USER', 'genealogy_user'),
-            'password': os.environ.get('GRAMPSWEB_POSTGRES_PASSWORD', 'GenealogyData2025'),
+            'database': os.environ.get('GRAMPSWEB_POSTGRES_DB', 'gramps'),
+            'user': os.environ.get('GRAMPSWEB_POSTGRES_USER', 'gramps'),
+            'password': os.environ.get('GRAMPSWEB_POSTGRES_PASSWORD', ''),
             'database_mode': 'monolithic'
         }
 
@@ -2095,17 +2117,17 @@ class PostgreSQLEnhancedBase(DBAPI):
             f.write("# PostgreSQL Enhanced Configuration\n")
             f.write("# Auto-generated for Gramps Web\n\n")
             f.write("# Connection details\n")
-            f.write("host = %s\n" % os.environ.get('GRAMPSWEB_POSTGRES_HOST', '192.168.10.90'))
+            f.write("host = %s\n" % os.environ.get('GRAMPSWEB_POSTGRES_HOST', 'localhost'))
             f.write("port = %s\n" % os.environ.get('GRAMPSWEB_POSTGRES_PORT', '5432'))
-            f.write("user = %s\n" % os.environ.get('GRAMPSWEB_POSTGRES_USER', 'genealogy_user'))
-            f.write("password = %s\n" % os.environ.get('GRAMPSWEB_POSTGRES_PASSWORD', 'GenealogyData2025'))
+            f.write("user = %s\n" % os.environ.get('GRAMPSWEB_POSTGRES_USER', 'gramps'))
+            f.write("password = %s\n" % os.environ.get('GRAMPSWEB_POSTGRES_PASSWORD', ''))
             f.write("\n# Database mode\n")
             f.write("database_mode = %s\n" % database_mode)
 
             if database_mode == 'monolithic':
                 f.write("\n# Monolithic mode configuration\n")
                 f.write("monolithic_database = %s\n" %
-                       os.environ.get('GRAMPSWEB_POSTGRES_DB', 'henderson_unified'))
+                       os.environ.get('GRAMPSWEB_POSTGRES_DB', 'gramps'))
                 f.write("tree_prefix = tree_%s_\n" % tree_id[:8])
 
         # Write database.txt
@@ -2150,11 +2172,11 @@ class PostgreSQLEnhancedBase(DBAPI):
             try:
                 # Connect to monolithic database
                 conn_params = {
-                    'host': os.environ.get('GRAMPSWEB_POSTGRES_HOST', '192.168.10.90'),
+                    'host': os.environ.get('GRAMPSWEB_POSTGRES_HOST', 'localhost'),
                     'port': int(os.environ.get('GRAMPSWEB_POSTGRES_PORT', 5432)),
-                    'dbname': os.environ.get('GRAMPSWEB_POSTGRES_DB', 'gramps_monolithic'),
-                    'user': os.environ.get('GRAMPSWEB_POSTGRES_USER', 'genealogy_user'),
-                    'password': os.environ.get('GRAMPSWEB_POSTGRES_PASSWORD', 'GenealogyData2025'),
+                    'dbname': os.environ.get('GRAMPSWEB_POSTGRES_DB', 'gramps'),
+                    'user': os.environ.get('GRAMPSWEB_POSTGRES_USER', 'gramps'),
+                    'password': os.environ.get('GRAMPSWEB_POSTGRES_PASSWORD', ''),
                 }
 
                 with psycopg.connect(**conn_params) as conn:
