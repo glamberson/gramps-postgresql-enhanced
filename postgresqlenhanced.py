@@ -204,6 +204,15 @@ class PostgreSQLEnhancedBase(DBAPI):
         if self.grampsweb_active:
             LOG.info("PostgreSQL Enhanced: Gramps Web environment detected")
 
+    def requires_login(self):
+        """
+        Returns True for backends that require a login dialog, else False.
+
+        PostgreSQL requires username/password authentication.
+        Gramps will prompt for credentials before calling load().
+        """
+        return True
+
     def get_summary(self):
         """
         Return a dictionary of information about this database backend.
