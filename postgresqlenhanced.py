@@ -910,7 +910,9 @@ class PostgreSQLEnhancedBase(DBAPI):
                     line = line.strip()
                     if line and not line.startswith("#") and "=" in line:
                         key, value = line.split("=", 1)
-                        config[key.strip()] = value.strip()
+                        # Strip inline comments before storing value
+                        value = value.split('#')[0].strip()
+                        config[key.strip()] = value
         return config
 
     def _load_connection_config(self, directory):
